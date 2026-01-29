@@ -1,12 +1,11 @@
 import axios from "axios";
 
 const api = axios.create({
-  // 👇 Dhyan dein: Ye Render wala link hona chahiye, Localhost nahi!
-  baseURL: "https://naveen-education.onrender.com/api/", 
-  withCredentials: true,
+  baseURL: "https://naveen-education.onrender.com/api/",
+  // 👇 Galti yahan thi. Ise 'false' kar dein.
+  withCredentials: false, 
 });
 
-// ✅ FORCE UPDATE: Switching to Render Backend
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("access");
