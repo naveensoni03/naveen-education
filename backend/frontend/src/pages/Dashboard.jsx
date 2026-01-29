@@ -23,11 +23,11 @@ export default function Dashboard() {
 
     const fetchDashboardData = async () => {
         try {
-            // Parallel API Calls - leading slash removed to match your axios baseURL
+            // ✅ UPDATED URLS: Added 'dashboard/' prefix to match Backend
             const [studentsRes, teachersRes, feesRes] = await Promise.all([
-                api.get("students/count/"), 
-                api.get("teachers/count/"), 
-                api.get("fees/summary/")    
+                api.get("dashboard/students/count/"), 
+                api.get("dashboard/teachers/count/"), 
+                api.get("dashboard/fees/summary/")    
             ]);
 
             if (isMounted) {
