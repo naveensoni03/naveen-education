@@ -1,0 +1,193 @@
+"""
+Django settings for core project.
+"""
+import os
+from pathlib import Path
+from datetime import timedelta
+import dj_database_url # ✅ Added for Server Database
+
+# --------------------------------------------------
+# BASE DIR
+# --------------------------------------------------
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# --------------------------------------------------
+# SECURITY
+# --------------------------------------------------
+SECRET_KEY = 'django-insecure-r3o(a=*ksfv+bpb3f%7fr3y8^_x%cb@+l+#tm4h@5+ge8)v!)m'
+
+# ✅ UPDATED FOR PRODUCTION
+DEBUG = False 
+
+# ✅ UPDATED TO ALLOW ALL DOMAINS
+ALLOWED_HOSTS = ['*']
+
+# --------------------------------------------------
+# APPLICATIONS
+# --------------------------------------------------
+INSTALLED_APPS = [
+    'profiles',
+    'fees',
+    'exams',
+    'attendance',
+    'batches',
+    'enrollments',
+    'agents',
+    # Django default
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+
+    # Third-party
+    'rest_framework',
+    'corsheaders',
+
+    # Project apps
+    'accounts',
+    'lms',
+    'services',
+    'classifieds',
+    'payments',
+    "dashboard",
+    "students",
+    'courses',
+    
+    # --- NEW MODULES ADDED ---
+    'library',
+    'inventory',
+    'hostel',
+    'transport',
+    
+    'teachers',
+    'institutions',
+    'django_cleanup.apps.CleanupConfig',
+]
+
+# --------------------------------------------------
+# MIDDLEWARE
+# --------------------------------------------------
+MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware', # ✅ ADDED FOR STATIC FILES (CSS)
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+# --------------------------------------------------
+# CORS
+# --------------------------------------------------
+CORS_ALLOW_ALL_ORIGINS = True
+
+# --------------------------------------------------
+# URL CONFIG
+# --------------------------------------------------
+ROOT_URLCONF = 'core.urls'
+
+# --------------------------------------------------
+# TEMPLATES
+# --------------------------------------------------
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [BASE_DIR / 'templates'],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+
+# --------------------------------------------------
+# WSGI
+# --------------------------------------------------
+WSGI_APPLICATION = 'core.wsgi.application'
+
+# --------------------------------------------------
+# DATABASE
+# --------------------------------------------------
+# ✅ LOGIC: Use Server Database if available, otherwise use Local MySQL
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'shivadda_db',
+        'USER': 'root',
+        'PASSWORD': 'naveensoni',
+        'HOST': '127.0.0.1',
+        'PORT': '3306',
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+        }
+    }
+}
+
+# Render Database Override
+db_from_env = dj_database_url.config(conn_max_age=600)
+DATABASES['default'].update(db_from_env)
+
+# --------------------------------------------------
+# PASSWORD VALIDATION
+# --------------------------------------------------
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
+
+# --------------------------------------------------
+# INTERNATIONALIZATION
+# --------------------------------------------------
+LANGUAGE_CODE = 'en-us'
+TIME_ZONE = 'Asia/Kolkata'
+USE_I18N = True
+USE_TZ = True
+
+# --------------------------------------------------
+# STATIC FILES (CSS, JS, IMAGES)
+# --------------------------------------------------
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# ✅ ADDED FOR PRODUCTION STORAGE
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# --------------------------------------------------
+# DEFAULT PK
+# --------------------------------------------------
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# --------------------------------------------------
+# CUSTOM USER MODEL
+# --------------------------------------------------
+AUTH_USER_MODEL = 'accounts.User'
+
+# --------------------------------------------------
+# DRF + JWT
+# --------------------------------------------------
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
