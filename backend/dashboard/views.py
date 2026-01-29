@@ -5,38 +5,36 @@ from django.db.models import Sum
 
 # Models Import
 from accounts.models import User
-from agents.models import Agent      # ✅ Teacher/Staff gine ke liye
-from students.models import Student  # ✅ Students gine ke liye
-
+from students.models import Student
+# Teacher gine ke liye models
 try:
-    from fees.models import FeePayment
+    from agents.models import Agent
 except ImportError:
-    FeePayment = None
+    Agent = None
 
 @api_view(['GET'])
 @permission_classes([AllowAny]) 
 def student_count(request):
-    # Admission list se total students ginega
+    # ✅ Asli Students ginega (Jo "1" dikha raha hai)
     count = Student.objects.count()
     return Response({'count': count})
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def teacher_count(request):
-    # ✅ FIX: Ab ye User table nahi, balki Agent/Teacher table ginega
-    # Agar aapne Agent mein teachers add kiye hain toh ye match ho jayega
-    count = Agent.objects.count()
+    # ✅ FIX: Sabse pehle Agent table dekhega
+    count = 0
+    if Agent:
+        count = Agent.objects.count()
+    
+    # Agar Agent khali hai, toh User table mein 'teacher' role dekhega
+    if count == 0:
+        count = User.objects.filter(role='teacher').count()
+        
     return Response({'count': count})
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def fee_summary(request):
-    if FeePayment:
-        collected = FeePayment.objects.aggregate(Sum('amount'))['amount__sum'] or 0
-    else:
-        collected = 0
-        
-    return Response({
-        'collected': collected,
-        'pending': 0 
-    })
+    # Fees summary (Abhi dummy, baad mein real karenge)
+    return Response({'collected': 0, 'pending': 0})
