@@ -1,8 +1,8 @@
 import axios from "axios";
 
 const api = axios.create({
-  // Trailing slash added to ensure sub-paths work correctly
-  baseURL: "http://127.0.0.1:8000/api/", 
+  // ✅ FIX: Ab ye Localhost nahi, balki Render wale Backend se baat karega
+  baseURL: "https://naveen-education.onrender.com/api/", 
 });
 
 api.interceptors.request.use(
