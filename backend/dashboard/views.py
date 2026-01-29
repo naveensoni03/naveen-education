@@ -6,24 +6,26 @@ from django.db.models import Sum
 # Models Import
 from accounts.models import User
 from courses.models import Course
-# Agar 'fees' app nahi hai toh niche wali line error de sakti hai, check kar lena
+from students.models import Student  # ✅ Naya Import: Student Table
+
+# Agar 'fees' app nahi hai toh niche wali line error de sakti hai
 try:
     from fees.models import FeePayment
 except ImportError:
     FeePayment = None
 
 @api_view(['GET'])
-@permission_classes([AllowAny]) # Filhal AllowAny rakha hai taaki testing mein dikkat na aaye
+@permission_classes([AllowAny]) 
 def student_count(request):
-    # Real 3 Students yahan se aayenge
-    count = User.objects.filter(role='student').count()
+    # ✅ FIX: Ab ye Login User nahi, balki 'Student' table ginega
+    # Jo 1 Student aapne banaya hai, wo yahan count ho jayega.
+    count = Student.objects.count()
     return Response({'count': count})
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def teacher_count(request):
-    # Teachers count (Assuming 'teacher' role or Agents)
-    # Filhal User role='teacher' count kar rahe hain
+    # Teachers count (Assuming 'teacher' role)
     count = User.objects.filter(role='teacher').count()
     return Response({'count': count})
 
@@ -38,5 +40,5 @@ def fee_summary(request):
         
     return Response({
         'collected': collected,
-        'pending': 0 # Ise baad mein dynamic kar lena
+        'pending': 0 
     })
