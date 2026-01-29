@@ -4,7 +4,7 @@ Django settings for core project.
 import os
 from pathlib import Path
 from datetime import timedelta
-import dj_database_url # ✅ Added for Server Database
+import dj_database_url
 
 # --------------------------------------------------
 # BASE DIR
@@ -16,10 +16,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # --------------------------------------------------
 SECRET_KEY = 'django-insecure-r3o(a=*ksfv+bpb3f%7fr3y8^_x%cb@+l+#tm4h@5+ge8)v!)m'
 
-# ✅ UPDATED FOR PRODUCTION
+# UPDATED FOR PRODUCTION
 DEBUG = False 
 
-# ✅ UPDATED TO ALLOW ALL DOMAINS
+# UPDATED TO ALLOW ALL DOMAINS
 ALLOWED_HOSTS = ['*']
 
 # --------------------------------------------------
@@ -72,7 +72,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware', # ✅ ADDED FOR STATIC FILES (CSS)
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -116,26 +116,15 @@ TEMPLATES = [
 WSGI_APPLICATION = 'core.wsgi.application'
 
 # --------------------------------------------------
-# DATABASE
+# DATABASE (FIXED FOR RENDER)
 # --------------------------------------------------
-# ✅ LOGIC: Use Server Database if available, otherwise use Local MySQL
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'shivadda_db',
-        'USER': 'root',
-        'PASSWORD': 'naveensoni',
-        'HOST': '127.0.0.1',
-        'PORT': '3306',
-        'OPTIONS': {
-            'charset': 'utf8mb4',
-        }
-    }
+    'default': dj_database_url.config(
+        # Local computer par SQLite chalega, Server par Postgres (Automatic)
+        default='sqlite:///db.sqlite3',
+        conn_max_age=600
+    )
 }
-
-# Render Database Override
-db_from_env = dj_database_url.config(conn_max_age=600)
-DATABASES['default'].update(db_from_env)
 
 # --------------------------------------------------
 # PASSWORD VALIDATION
@@ -161,7 +150,6 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# ✅ ADDED FOR PRODUCTION STORAGE
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # --------------------------------------------------
