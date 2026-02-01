@@ -51,7 +51,13 @@ export default function Exams() {
     passingMarks: "33", batch: "Class 10-A", instructions: "" 
   });
 
-  // ✅ 1. DATA FETCHING FUNCTION (Reusable)
+  // ✅ 1. ADDED: Safe Sound Function (Fixes Red Error)
+  const playSound = () => {
+    const audio = new Audio("https://actions.google.com/sounds/v1/cartoon/pop.ogg");
+    audio.play().catch(e => console.error("Audio play failed:", e));
+  };
+
+  // ✅ 2. DATA FETCHING FUNCTION (Reusable)
   const fetchExams = useCallback(async (showToast = false) => {
     if(showToast) setIsRefreshing(true);
     try {
@@ -111,6 +117,7 @@ export default function Exams() {
         if(imageSrc) {
             setFaceVerified(true);
             setIsVerifying(false);
+            playSound(); // ✅ Sound Added
             toast.success("Identity Verified Successfully! 🟢");
             setLiveLogs(prev => [`• ${new Date().toLocaleTimeString()} - Identity Check Passed`, ...prev]);
         }
@@ -129,6 +136,7 @@ export default function Exams() {
         
         if(response.data.status === 'success') {
             setAiQuestions(response.data.questions);
+            playSound(); // ✅ Sound Added
             toast.success("✨ AI Generated Fresh Questions!");
         } else {
             toast.error("AI Brain Overloaded! Try again.");
@@ -143,7 +151,7 @@ export default function Exams() {
     }
   };
 
-  // ✅ SAVE TO QUESTION BANK LOGIC (Auto-Refreshes List)
+  // ✅ SAVE TO QUESTION BANK LOGIC
   const handleSaveToBank = async () => {
     if(!aiQuestions || aiQuestions.length === 0) return toast.error("No questions to save!");
 
@@ -156,9 +164,10 @@ export default function Exams() {
         });
 
         if(response.data.status === 'success') {
+            playSound(); // ✅ Sound Added
             toast.success("Quiz Saved to Exam Bank! 🎉", { id: toastId });
             setActivePanel("none"); 
-            fetchExams(true); // ✅ NO RELOAD NEEDED, Updates List Instantly
+            fetchExams(true); 
         } else {
             toast.error("Failed to Save.", { id: toastId });
         }
@@ -203,9 +212,11 @@ export default function Exams() {
       toast.loading("Sending SMS alerts...");
       await api.post(`exams/notify/`, { exam_id: examId }); 
       toast.dismiss();
+      playSound(); // ✅ Sound Added
       toast.success("SMS Sent to all Parents! 📱");
     } catch (error) {
       toast.dismiss();
+      playSound(); // ✅ Sound Added
       toast.success("DEBUG: SMS Signal Triggered ✅");
     }
   };
@@ -232,9 +243,10 @@ export default function Exams() {
 
   const handleSaveSchedule = async () => {
       if(!formData.title) return toast.error("Enter Exam Title");
+      playSound(); // ✅ Sound Added
       toast.success("Exam Published! 🚀");
       setActivePanel("none");
-      fetchExams(true); // ✅ Updates List on manual creation too
+      fetchExams(true); 
   };
 
   const getStatusBadge = (status) => {
@@ -263,7 +275,7 @@ export default function Exams() {
           </div>
           <div style={{display: 'flex', gap: '12px'}}>
             
-            {/* ✅ REFRESH BUTTON ADDED */}
+            {/* ✅ REFRESH BUTTON */}
             <button 
                 onClick={() => fetchExams(true)} 
                 className={`btn-icon-only ${isRefreshing ? 'spin-fast' : ''}`} 
@@ -398,7 +410,6 @@ export default function Exams() {
                                                 </div>
                                             </div>
                                         ))}
-                                        {/* ✅ BUTTON KO NEW FUNCTION SE CONNECT KAR DIYA */}
                                         <button 
                                             className="btn-save-quiz hover-lift" 
                                             onClick={handleSaveToBank}

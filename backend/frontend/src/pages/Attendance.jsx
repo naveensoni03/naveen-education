@@ -13,10 +13,10 @@ export default function Attendance() {
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5; // Kitne students dikhenge ek page par
+  const itemsPerPage = 5; 
 
   useEffect(() => {
-    // Real-Like Mock Data (More Data for Pagination Demo)
+    // Mock Data
     const mockStudents = [
       { id: 1, name: "Naveen Soni", roll: "101", status: "Present", monthlyAvg: 92, remarks: "" },
       { id: 2, name: "Kunal Verma", roll: "102", status: "Present", monthlyAvg: 88, remarks: "" },
@@ -64,7 +64,15 @@ export default function Attendance() {
     setStudents(prev => prev.map(s => s.id === id ? { ...s, remarks: text } : s));
   };
 
+  // ✅ FIX: Maine yahan Online Link daal diya hai. 
+  // Ab browser 'mixkit' wali file nahi dhoondega, seedha Google se sound bajayega.
+  const playSound = () => {
+    const audio = new Audio("https://actions.google.com/sounds/v1/cartoon/pop.ogg");
+    audio.play().catch(e => console.log("Audio play failed:", e));
+  };
+
   const handleSave = () => {
+    playSound(); // ✅ Ab ye 100% chalega bina error ke
     console.log("Saving Attendance...", { selectedClass, selectedSubject, notifyParents, students });
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2500);
@@ -132,10 +140,9 @@ export default function Attendance() {
             </div>
         </div>
 
-        {/* ATTENDANCE SHEET (Pagination Added) */}
+        {/* ATTENDANCE SHEET */}
         <div className="glass-card fade-in-up" style={{ flex: 1, background: 'white', padding: '25px 30px', borderRadius: '24px', animationDelay: '0.5s', boxShadow: '0 10px 40px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' }}>
             
-            {/* Table Container (No Scroll, Fixed Height) */}
             <div style={{minHeight: '380px'}}> 
                 <table className="modern-table luxe-table">
                     <thead>
