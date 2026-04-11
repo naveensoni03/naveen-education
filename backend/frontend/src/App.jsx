@@ -1,6 +1,7 @@
-import React from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
 
+// Pages Import
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Enrollments from "./pages/Enrollments";
@@ -10,50 +11,200 @@ import Attendance from "./pages/Attendance";
 import Institutions from "./pages/Institutions";
 import Teachers from "./pages/Teachers";
 import FeesLedger from "./pages/FeesLedger";
-import SystemConfig from './pages/SystemConfig';
+import SystemConfig from "./pages/SystemConfig";
 import Exams from "./pages/Exams";
 import Homework from "./pages/Homework";
 import Library from "./pages/Library";
 import Transport from "./pages/Transport";
 import Hostel from "./pages/Hostel";
 import Inventory from "./pages/Inventory";
-// ✅ Import ChatWidget
-import ChatWidget from './components/ChatWidget';
+import Payroll from "./pages/Payroll";
+import Visitors from "./pages/Visitors";
+import Agents from "./pages/Agents";
+import Locations from "./pages/Locations";
+import ServiceMaster from "./pages/ServiceMaster";
+import AccessLogs from "./pages/AccessLogs";
+import UserManager from "./pages/UserManager";
+import VirtualSpace from "./pages/VirtualSpace";
+import Timetable from "./pages/Timetable";
+import Communication from "./pages/Communication";
+import AIBrain from "./pages/AIBrain";
+import GlobalSettings from "./pages/GlobalSettings";
+import RecycleBin from "./pages/RecycleBin";
+
+// 👑 SUPER ADMIN PORTAL IMPORT
+import SuperAdminDashboard from "./pages/SuperAdmin/SuperAdminDashboard";
+
+// 📰 PUBLIC PORTAL IMPORTS
+import NewsPortal from "./pages/NewsPortal";
+
+// 🎓 STUDENT PORTAL IMPORTS
+import StudentLogin from "./pages/student/StudentLogin";
+import StudentDashboard from "./pages/student/Dashboard";
+import MyCourses from "./pages/student/MyCourses";
+import StudentExams from "./pages/student/Exams";
+import StudentTimetable from "./pages/student/Timetable";
+import StudentProfile from "./pages/student/Profile";
+import StudentCourseSpace from "./pages/student/StudentCourseSpace";
+import StudentAssignments from "./pages/student/StudentAssignments";
+import TakeExam from "./pages/student/TakeExam";
+import StudentFees from "./pages/student/Fees";
+
+// 👩‍🏫 TEACHER PORTAL IMPORTS
+import TeacherLogin from "./pages/Teachers/TeacherLogin";
+import TeacherDashboard from "./pages/Teachers/Dashboard";
+import TeacherLayout from "./pages/Teachers/TeacherLayout";
+import TeacherMaterial from "./pages/Teachers/TeacherMaterial";
+import TeacherClasses from "./pages/Teachers/TeacherClasses";
+import TeacherExams from "./pages/Teachers/Exams";
+import TeacherAssignments from "./pages/Teachers/TeacherAssignments";
+import TeacherStudents from "./pages/Teachers/TeacherStudents";
+import TeacherMailbox from "./pages/Teachers/TeacherMailbox";
+import TeacherFees from "./pages/Teachers/Fees";
+import TeacherSettings from "./pages/Teachers/TeacherSettings";
+
+// 👨‍👩‍👧 PARENT PORTAL IMPORTS 
+import ParentDashboard from "./pages/parent/ParentDashboard";
+import ParentLogin from "./pages/parent/ParentLogin";
+import ParentFees from "./pages/parent/ParentFees";
+import ParentChildren from "./pages/parent/ParentChildren";
+import ParentExams from "./pages/parent/ParentExams";
+import ParentCommunication from "./pages/parent/ParentCommunication";
+import ParentSettings from "./pages/parent/ParentSettings";
+
+// Components
+import ChatWidget from "./components/ChatWidget";
+
+// 🔐 ADVANCED ROLE-BASED SECURITY GUARD (STRICT MODE)
+const ProtectedRoute = ({ children, allowedRoles }) => {
+  const token = sessionStorage.getItem("access_token") || localStorage.getItem("access_token");
+  let rawRole = sessionStorage.getItem("user_role") || localStorage.getItem("user_role") || "";
+
+  const userRole = rawRole.replace(/['"]/g, "").trim().toLowerCase().replace(/_/g, " ");
+
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const safeAllowedRoles = allowedRoles.map(role => role.toLowerCase().trim().replace(/_/g, " "));
+
+  if (!safeAllowedRoles.includes(userRole)) {
+    console.warn(`🛡️ Access Denied! Role "${rawRole}" tried to access a restricted route.`);
+
+    // Strict Role Redirects
+    if (userRole === "student") return <Navigate to="/student/dashboard" replace />;
+    if (userRole === "teacher") return <Navigate to="/teacher/dashboard" replace />;
+    if (userRole === "parent") return <Navigate to="/parent/dashboard" replace />;
+    if (userRole === "super admin" || userRole === "admin") return <Navigate to="/dashboard" replace />;
+
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+};
 
 export default function App() {
+  const STAFF_ALL = ["Super Admin", "Admin", "Teacher", "Accountant", "Receptionist"];
+  const ADMIN_ONLY = ["Super Admin", "Admin"];
+  const FINANCE_ROLES = ["Super Admin", "Admin", "Accountant"];
+  const ACADEMIC_STAFF = ["Super Admin", "Admin", "Teacher"];
+
   return (
-    <Router>
+    <BrowserRouter>
       <div className="app-layout">
+        <Toaster position="top-right" />
         <Routes>
+
+          {/* 🌐 Public Routes */}
+          <Route path="/news" element={<NewsPortal />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/student/login" element={<StudentLogin />} />
+          <Route path="/teacher/login" element={<TeacherLogin />} />
+          <Route path="/parent/login" element={<ParentLogin />} />
 
-          {/* Priority Routes */}
-          <Route path="/enrollments" element={<Enrollments />} />
-          <Route path="/library" element={<Library />} />
-          <Route path="/transport" element={<Transport />} />
-          <Route path="/hostel" element={<Hostel />} />
-          <Route path="/inventory" element={<Inventory />} />
-          
-          {/* Core Modules */}
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/students" element={<Students />} />
-          <Route path="/teachers" element={<Teachers />} />
-          <Route path="/institutions" element={<Institutions />} />
-          <Route path="/courses" element={<Courses />} />
-          <Route path="/attendance" element={<Attendance />} />
-          <Route path="/homework" element={<Homework />} />
-          <Route path="/exams" element={<Exams />} />
-          <Route path="/fees" element={<FeesLedger />} />
-          <Route path="/system" element={<SystemConfig />} />
-
-          {/* Catch-all Fallback */}
+          {/* 🏠 Default Protected Route */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
 
-        {/* ✅ AI CHATBOT ADDED HERE */}
+          {/* ==========================================
+              🏢 MAIN ADMIN/STAFF PROTECTED ROUTES 
+          ============================================= */}
+          <Route path="/superadmin/master-data" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><SuperAdminDashboard /></ProtectedRoute>} />
+
+          <Route path="/dashboard" element={<ProtectedRoute allowedRoles={STAFF_ALL}><Dashboard /></ProtectedRoute>} />
+          <Route path="/institutions" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><Institutions /></ProtectedRoute>} />
+          <Route path="/locations" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><Locations /></ProtectedRoute>} />
+          <Route path="/services" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><ServiceMaster /></ProtectedRoute>} />
+          <Route path="/access-logs" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><AccessLogs /></ProtectedRoute>} />
+          <Route path="/users" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><UserManager /></ProtectedRoute>} />
+          <Route path="/system" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><SystemConfig /></ProtectedRoute>} />
+          <Route path="/ai-brain" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><AIBrain /></ProtectedRoute>} />
+          <Route path="/visitors" element={<ProtectedRoute allowedRoles={["Super Admin", "Admin", "Receptionist"]}><Visitors /></ProtectedRoute>} />
+          <Route path="/teachers" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><Teachers /></ProtectedRoute>} />
+          <Route path="/agents" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><Agents /></ProtectedRoute>} />
+          <Route path="/students" element={<ProtectedRoute allowedRoles={ACADEMIC_STAFF}><Students /></ProtectedRoute>} />
+          <Route path="/admissions" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><Enrollments /></ProtectedRoute>} />
+
+          {/* 🔥 FIXED: Allowed Teachers to access Course Manager if you want. If not, change ACADEMIC_STAFF to ADMIN_ONLY */}
+          <Route path="/courses" element={<ProtectedRoute allowedRoles={ACADEMIC_STAFF}><Courses /></ProtectedRoute>} />
+
+          <Route path="/virtual-space" element={<ProtectedRoute allowedRoles={ACADEMIC_STAFF}><VirtualSpace /></ProtectedRoute>} />
+          <Route path="/attendance" element={<ProtectedRoute allowedRoles={ACADEMIC_STAFF}><Attendance /></ProtectedRoute>} />
+          <Route path="/homework" element={<ProtectedRoute allowedRoles={ACADEMIC_STAFF}><Homework /></ProtectedRoute>} />
+          <Route path="/exams" element={<ProtectedRoute allowedRoles={ACADEMIC_STAFF}><Exams /></ProtectedRoute>} />
+          <Route path="/timetable" element={<ProtectedRoute allowedRoles={ACADEMIC_STAFF}><Timetable /></ProtectedRoute>} />
+          <Route path="/fees" element={<ProtectedRoute allowedRoles={FINANCE_ROLES}><FeesLedger /></ProtectedRoute>} />
+          <Route path="/payroll" element={<ProtectedRoute allowedRoles={FINANCE_ROLES}><Payroll /></ProtectedRoute>} />
+          <Route path="/library" element={<ProtectedRoute allowedRoles={STAFF_ALL}><Library /></ProtectedRoute>} />
+          <Route path="/transport" element={<ProtectedRoute allowedRoles={STAFF_ALL}><Transport /></ProtectedRoute>} />
+          <Route path="/hostel" element={<ProtectedRoute allowedRoles={STAFF_ALL}><Hostel /></ProtectedRoute>} />
+          <Route path="/inventory" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><Inventory /></ProtectedRoute>} />
+          <Route path="/communication" element={<ProtectedRoute allowedRoles={["Super Admin", "Admin", "Teacher"]}><Communication /></ProtectedRoute>} />
+          <Route path="/global-settings" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><GlobalSettings /></ProtectedRoute>} />
+          <Route path="/recycle-bin" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><RecycleBin /></ProtectedRoute>} />
+
+          {/* ==========================================
+              🎓 STUDENT PORTAL PROTECTED ROUTES
+          ============================================= */}
+          <Route path="/student/dashboard" element={<ProtectedRoute allowedRoles={["Student"]}><StudentDashboard /></ProtectedRoute>} />
+          <Route path="/student/course-space/:courseId" element={<ProtectedRoute allowedRoles={["Student"]}><StudentCourseSpace /></ProtectedRoute>} />
+          <Route path="/student/courses" element={<ProtectedRoute allowedRoles={["Student"]}><MyCourses /></ProtectedRoute>} />
+          <Route path="/student/timetable" element={<ProtectedRoute allowedRoles={["Student"]}><StudentTimetable /></ProtectedRoute>} />
+          <Route path="/student/exams" element={<ProtectedRoute allowedRoles={["Student"]}><StudentExams /></ProtectedRoute>} />
+          <Route path="/student/profile" element={<ProtectedRoute allowedRoles={["Student"]}><StudentProfile /></ProtectedRoute>} />
+          <Route path="/student/assignments" element={<ProtectedRoute allowedRoles={["Student"]}><StudentAssignments /></ProtectedRoute>} />
+          <Route path="/student/exam/:id" element={<ProtectedRoute allowedRoles={["Student"]}><TakeExam /></ProtectedRoute>} />
+          <Route path="/student/fees" element={<ProtectedRoute allowedRoles={["Student"]}><StudentFees /></ProtectedRoute>} />
+
+          {/* ==========================================
+              👩‍🏫 TEACHER PORTAL PROTECTED ROUTES
+          ============================================= */}
+          <Route path="/teacher" element={<ProtectedRoute allowedRoles={["Teacher"]}><TeacherLayout /></ProtectedRoute>}>
+            <Route path="dashboard" element={<TeacherDashboard />} />
+            <Route path="material" element={<TeacherMaterial />} />
+            <Route path="classes" element={<TeacherClasses />} />
+            <Route path="exams" element={<TeacherExams />} />
+            <Route path="assignments" element={<TeacherAssignments />} />
+            <Route path="students" element={<TeacherStudents />} />
+            <Route path="mailbox" element={<TeacherMailbox />} />
+            <Route path="messages" element={<TeacherMailbox />} />
+            <Route path="fees" element={<TeacherFees />} />
+            <Route path="wallet" element={<TeacherFees />} />
+            <Route path="settings" element={<TeacherSettings />} />
+          </Route>
+
+          {/* ==========================================
+              👨‍👩‍👧 PARENT PORTAL PROTECTED ROUTES
+          ============================================= */}
+          <Route path="/parent/dashboard" element={<ProtectedRoute allowedRoles={["Parent"]}><ParentDashboard /></ProtectedRoute>} />
+          <Route path="/parent/children" element={<ProtectedRoute allowedRoles={["Parent"]}><ParentChildren /></ProtectedRoute>} />
+          <Route path="/parent/fees" element={<ProtectedRoute allowedRoles={["Parent"]}><ParentFees /></ProtectedRoute>} />
+          <Route path="/parent/exams" element={<ProtectedRoute allowedRoles={["Parent"]}><ParentExams /></ProtectedRoute>} />
+          <Route path="/parent/messages" element={<ProtectedRoute allowedRoles={["Parent"]}><ParentCommunication /></ProtectedRoute>} />
+          <Route path="/parent/settings" element={<ProtectedRoute allowedRoles={["Parent"]}><ParentSettings /></ProtectedRoute>} />
+
+        </Routes>
         <ChatWidget />
       </div>
-    </Router>
+    </BrowserRouter>
   );
 }

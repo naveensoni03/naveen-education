@@ -1,7 +1,9 @@
-"""
+﻿"""
 Django settings for core project.
 """
 import os
+from dotenv import load_dotenv
+load_dotenv()
 from pathlib import Path
 from datetime import timedelta
 import dj_database_url
@@ -14,86 +16,64 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # --------------------------------------------------
 # SECURITY
 # --------------------------------------------------
-SECRET_KEY = 'django-insecure-r3o(a=*ksfv+bpb3f%7fr3y8^_x%cb@+l+#tm4h@5+ge8)v!)m'
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-r3o(a=*ksfv+bpb3f%7fr3y8^_x%cb@+l+#tm4h@5+ge8)v!)m')
 
-# UPDATED FOR PRODUCTION
-DEBUG = False 
+DEBUG = True 
 
-# UPDATED TO ALLOW ALL DOMAINS
-ALLOWED_HOSTS = ['*']
+# 🔥 UPDATED: Added specific hosts for production
+ALLOWED_HOSTS = [
+    'shivadda-backend-updated-software.onrender.com', 
+    'shivadda-backend-updated-software.vercel.app',
+    'localhost', 
+    '127.0.0.1',
+    '*' # Testing ke liye allow rakha hai
+]
 
 # --------------------------------------------------
 # APPLICATIONS
 # --------------------------------------------------
 INSTALLED_APPS = [
-    'profiles',
-    'fees',
-    'exams',
-    'attendance',
-    'batches',
-    'enrollments',
-    'agents',
-    # Django default
+    'interactions',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
-    # Third-party
+    
     'rest_framework',
-    'corsheaders',
-
-    # Project apps
-    'accounts',
-    'lms',
-    'services',
-    'classifieds',
-    'payments',
-    "dashboard",
-    "students",
-    'courses',
-    
-    # --- NEW MODULES ADDED ---
-    'library',
-    'inventory',
-    'hostel',
-    'transport',
-    
-    'teachers',
-    'institutions',
+    'corsheaders', # 🔥 CORS is important
+    'django_filters',
     'django_cleanup.apps.CleanupConfig',
+    'rest_framework_simplejwt',
+
+    'api', 'accounts', 'dashboard', 'chatbot', 'centers', 
+    'locations', 'visitors', 'logs', 'students', 'teachers',
+    'institutions', 'courses', 'batches', 'enrollments',
+    'attendance', 'fees', 'exams', 'lms', 'library',
+    'inventory', 'hostel', 'transport', 'payroll',
+    'services', 'classifieds', 'payments', 'profiles',
+    'agents', 'timetable','news','parents',
 ]
 
 # --------------------------------------------------
 # MIDDLEWARE
 # --------------------------------------------------
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
+    'corsheaders.middleware.CorsMiddleware', # 🔥 Must be at the top
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware', 
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.middleware.LicenseVerificationMiddleware',
 ]
 
-# --------------------------------------------------
-# CORS
-# --------------------------------------------------
-CORS_ALLOW_ALL_ORIGINS = True
+ROOT_URLCONF = 'core.urls'  
 
-# --------------------------------------------------
-# URL CONFIG
-# --------------------------------------------------
-ROOT_URLCONF = 'core.urls'
-
-# --------------------------------------------------
-# TEMPLATES
-# --------------------------------------------------
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -110,25 +90,15 @@ TEMPLATES = [
     },
 ]
 
-# --------------------------------------------------
-# WSGI
-# --------------------------------------------------
-WSGI_APPLICATION = 'core.wsgi.application'
+WSGI_APPLICATION = 'core.wsgi.application' 
 
-# --------------------------------------------------
-# DATABASE (FIXED FOR RENDER)
-# --------------------------------------------------
 DATABASES = {
     'default': dj_database_url.config(
-        # Local computer par SQLite chalega, Server par Postgres (Automatic)
         default='sqlite:///db.sqlite3',
         conn_max_age=600
     )
 }
 
-# --------------------------------------------------
-# PASSWORD VALIDATION
-# --------------------------------------------------
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -136,46 +106,74 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-# --------------------------------------------------
-# INTERNATIONALIZATION
-# --------------------------------------------------
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'Asia/Kolkata'
 USE_I18N = True
 USE_TZ = True
 
-# --------------------------------------------------
-# STATIC FILES (CSS, JS, IMAGES)
-# --------------------------------------------------
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# --------------------------------------------------
-# DEFAULT PK
-# --------------------------------------------------
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-# --------------------------------------------------
-# CUSTOM USER MODEL
-# --------------------------------------------------
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'accounts.User'
 
 # --------------------------------------------------
-# DRF + JWT
+# 🔥 CORS & CSRF SETTINGS (FIXED FOR VERCEL ERROR)
+# --------------------------------------------------
+CORS_ALLOW_ALL_ORIGINS = True # Development ke liye easy rakha hai
+CORS_ALLOW_CREDENTIALS = True
+
+# Specific origins for safety
+CORS_ALLOWED_ORIGINS = [
+    "https://shivadda-backend-updated-software.vercel.app",
+    "http://localhost:5173",
+]
+
+# CSRF Trusted origins (Render needs this)
+CSRF_TRUSTED_ORIGINS = [
+    "https://shivadda-backend-updated-software.onrender.com",
+    "https://shivadda-backend-updated-software.vercel.app"
+]
+
+# --------------------------------------------------
+# DRF + JWT SETTINGS
 # --------------------------------------------------
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication', 
     ),
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny', 
+    ],
+    'DEFAULT_PAGINATION_CLASS': None,
+    'PAGE_SIZE': None,
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1), 
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+# --------------------------------------------------
+# 🔥 TWILIO SMS API CONFIGURATION 🔥
+# --------------------------------------------------
+TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
+TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
+TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
+
+# --------------------------------------------------
+# 📧 DEFAULT GMAIL SMTP CONFIGURATION (100% WORKING) 📧
+# --------------------------------------------------
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', 'Soninaveen9756@gmail.com')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', 'ssdahuyofdvqwxlk')
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER

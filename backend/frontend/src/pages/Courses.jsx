@@ -1,447 +1,622 @@
 import React, { useState, useEffect } from "react";
 import SidebarModern from "../components/SidebarModern";
-import "./dashboard.css"; 
 import toast, { Toaster } from 'react-hot-toast';
-import api from "../api/axios"; // ✅ Real API connection
+import api from "../api/axios";
 
 export default function Courses() {
-  const [courses, setCourses] = useState([]);
-  const [filteredCourses, setFilteredCourses] = useState([]);
-  
-  // Panel States
-  const [activePanel, setActivePanel] = useState("none"); 
-  const [selectedCourse, setSelectedCourse] = useState(null);
-  const [panelTab, setPanelTab] = useState("overview"); 
+    const [courses, setCourses] = useState([]);
+    const [filteredCourses, setFilteredCourses] = useState([]);
 
-  // Filters & Categories
-  const [categoryFilter, setCategoryFilter] = useState("All");
-  const [categories, setCategories] = useState(["Development", "Design", "Data Science", "Marketing", "Business"]); 
-  const [isAddingCategory, setIsAddingCategory] = useState(false); 
-  const [newCategoryName, setNewCategoryName] = useState(""); 
+    const [activePanel, setActivePanel] = useState("none");
+    const [selectedCourse, setSelectedCourse] = useState(null);
+    const [panelTab, setPanelTab] = useState("overview");
 
-  // Notification States
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [notificationMsg, setNotificationMsg] = useState("");
+    const [categoryFilter, setCategoryFilter] = useState("All");
+    const [categories, setCategories] = useState(["Development", "Design", "Data Science", "Marketing", "Business"]);
+    const [isAddingCategory, setIsAddingCategory] = useState(false);
+    const [newCategoryName, setNewCategoryName] = useState("");
 
-  // Form State
-  const [formData, setFormData] = useState({
-    title: "", code: "", instructor: "", 
-    duration: "", price: "", level: "Beginner",
-    category: "Development", 
-    description: "", modules: 0,
-    image: null 
-  });
-
-  const [imagePreview, setImagePreview] = useState(null); 
-
-  // ✅ FIX: Alag-alag photos ki list
-  const courseImages = [
-    "https://images.unsplash.com/photo-1587620962725-abab7fe55159?auto=format&fit=crop&w=800&q=80", // Coding
-    "https://images.unsplash.com/photo-1516116216624-53e697fedbea?auto=format&fit=crop&w=800&q=80", // Python/AI
-    "https://images.unsplash.com/photo-1561070791-2526d30994b5?auto=format&fit=crop&w=800&q=80", // Design/Art
-    "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=800&q=80", // Cyber Security
-    "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80", // Marketing
-    "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80"  // Data/Analytics
-  ];
-
-  // ✅ FETCH REAL COURSES FROM DB
-  const fetchCourses = async () => {
-    try {
-      const response = await api.get("courses/");
-      // Backend format handle karna (Array vs Object)
-      const data = Array.isArray(response.data) ? response.data : response.data.results || [];
-      
-      // Data ko UI format me map karna (taki purana design na tute)
-      const formattedData = data.map((c, index) => ({
-        id: c.id,
-        title: c.name, // Backend 'name' bhejta hai, frontend 'title' use kar raha hai
-        code: `CRS-${100 + index}`, // Auto-generate code if missing
-        instructor: "Expert Instructor", // Default placeholder
-        students: Math.floor(Math.random() * 200) + 50, // Mock stats
-        rating: (Math.random() * (5.0 - 4.0) + 4.0).toFixed(1), // Mock rating
-        modules: 12,
-        price: 2999, // Default price
-        level: "Intermediate",
+    const [formData, setFormData] = useState({
+        title: "", code: "", instructor: "",
+        duration: "", price: "", level: "Beginner",
         category: "Development",
-        // ✅ FIX: Index ke hisaab se alag photo uthayega
-        image: courseImages[index % courseImages.length],
-        description: c.description || "No description available."
-      }));
-
-      setCourses(formattedData);
-      setFilteredCourses(formattedData);
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to load courses from database");
-    }
-  };
-
-  useEffect(() => {
-    fetchCourses();
-  }, []);
-
-  useEffect(() => {
-    if (categoryFilter === "All") {
-        setFilteredCourses(courses);
-    } else {
-        setFilteredCourses(courses.filter(c => c.category === categoryFilter));
-    }
-  }, [categoryFilter, courses]);
-
-  // --- ACTIONS ---
-  const handleCardClick = (course) => {
-    setSelectedCourse(course);
-    setPanelTab("overview");
-    setActivePanel("detail");
-  };
-
-  const handleCreateOpen = () => {
-    setSelectedCourse(null);
-    setFormData({ title: "", code: "", instructor: "", duration: "", price: "", level: "Beginner", category: categories[0], description: "", modules: 0, image: null });
-    setImagePreview(null);
-    setIsAddingCategory(false); 
-    setActivePanel("create");
-  };
-
-  const handleEdit = () => {
-    setFormData({
-        title: selectedCourse.title,
-        code: selectedCourse.code,
-        instructor: selectedCourse.instructor,
-        price: selectedCourse.price,
-        level: selectedCourse.level,
-        category: selectedCourse.category,
-        description: selectedCourse.description,
-        duration: "20 Hrs", 
-        modules: selectedCourse.modules,
-        image: selectedCourse.image
+        description: "", modules: 0,
+        image: null
     });
-    setImagePreview(selectedCourse.image);
-    setIsAddingCategory(false);
-    setActivePanel("create");
-  };
 
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-        setFormData({ ...formData, image: file });
-        setImagePreview(URL.createObjectURL(file)); 
-    }
-  };
+    const [newBatchName, setNewBatchName] = useState("");
+    const [newBatchDate, setNewBatchDate] = useState("");
+    // 🔥 NEW STATE FOR WHATSAPP LINK
+    const [newWhatsAppLink, setNewWhatsAppLink] = useState("");
 
-  // ✅ REAL DELETE FUNCTION
-  const handleDelete = async () => {
-    if(!selectedCourse) return;
-    if(!window.confirm("Are you sure? This will remove the course from Enrollment dropdown too.")) return;
+    const [courseBatches, setCourseBatches] = useState([]);
+    const [viewingBatch, setViewingBatch] = useState(null);
+    const [imagePreview, setImagePreview] = useState(null);
 
-    try {
-        await api.delete(`courses/${selectedCourse.id}/`);
-        toast.success("Course Deleted Successfully! 🗑️");
-        setActivePanel("none");
-        fetchCourses(); // Refresh list
-    } catch (error) {
-        toast.error("Failed to delete course");
-    }
-  };
+    const courseImages = [
+        "https://images.unsplash.com/photo-1587620962725-abab7fe55159?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1516116216624-53e697fedbea?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1561070791-2526d30994b5?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80"
+    ];
 
-  // ✅ REAL SAVE FUNCTION
-  const handleSave = async () => {
-    if(!formData.title) return toast.error("Title is required");
-    
-    try {
-        const payload = {
-            name: formData.title,
-            description: formData.description
-        };
+    const fetchCourses = async () => {
+        try {
+            const response = await api.get("courses/list/");
+            const data = Array.isArray(response.data) ? response.data : response.data.results || [];
 
-        if (selectedCourse) {
-            await api.put(`courses/${selectedCourse.id}/`, payload);
-            toast.success("Course Updated Successfully! ✅");
-        } else {
-            await api.post("courses/", payload);
-            toast.success("New Course Published! 🎉");
+            const formattedData = data.map((c, index) => ({
+                id: c.id,
+                title: c.name,
+                code: c.code || `CRS-${100 + index}`,
+                instructor: c.institution_name || "Expert Instructor",
+                students: Math.floor(Math.random() * 200) + 50,
+                rating: (Math.random() * (5.0 - 4.0) + 4.0).toFixed(1),
+                modules: c.lessons_count || 0,
+                price: parseFloat(c.fee_per_year) || 0,
+                level: "Intermediate",
+                category: "Development",
+                image: courseImages[index % courseImages.length],
+                description: c.description || ""
+            }));
+
+            setCourses(formattedData);
+            setFilteredCourses(formattedData);
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to load courses from database");
         }
-        
-        setActivePanel("none");
-        fetchCourses(); // Refresh List
-    } catch (error) {
-        toast.error("Server Error: Could not save course");
-    }
-  };
+    };
 
-  // ✅ Add New Category Logic
-  const handleAddNewCategory = () => {
-      if(!newCategoryName.trim()) return;
-      setCategories([...categories, newCategoryName]);
-      setFormData({...formData, category: newCategoryName});
-      setIsAddingCategory(false);
-      setNewCategoryName("");
-      toast.success(`Category '${newCategoryName}' Added!`);
-  };
+    useEffect(() => {
+        fetchCourses();
+    }, []);
 
-  const inputStyle = {
-    width: '100%', padding: '12px', borderRadius: '12px', 
-    border: '1px solid #334155', background: '#1e293b', 
-    color: '#ffffff', outline: 'none', fontSize: '0.9rem',
-    transition: '0.3s'
-  };
+    useEffect(() => {
+        if (categoryFilter === "All") {
+            setFilteredCourses(courses);
+        } else {
+            setFilteredCourses(courses.filter(c => c.category === categoryFilter));
+        }
+    }, [categoryFilter, courses]);
 
-  return (
-    <div className="dashboard-container" style={{background: '#f8fafc', height: '100vh', display: 'flex', overflow: 'hidden', position: 'relative'}}>
-      <div className="ambient-bg"></div>
-      <SidebarModern />
-      <Toaster position="top-center" />
+    const handleCardClick = async (course) => {
+        setSelectedCourse(course);
+        setPanelTab("overview");
+        setActivePanel("detail");
+        fetchBatches(course.id);
+    };
 
-      <div className="main-content" style={{flex: 1, padding: '30px 40px', overflowY: 'auto', position: 'relative', display: 'flex', flexDirection: 'column', zIndex: 1}}>
-        
-        <header className="slide-in-down" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '35px', flexShrink: 0 }}>
-          <div>
-            <h1 className="gradient-text" style={{ fontSize: '2.5rem', fontWeight: '900', letterSpacing: '-1px', margin: 0 }}>Course Manager</h1>
-            <p style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: '500', margin: '5px 0 0' }}>Create, manage and publish learning content.</p>
-          </div>
-          
-          <div style={{display:'flex', gap:'15px'}}>
-             <select 
-                value={categoryFilter} 
-                onChange={(e) => setCategoryFilter(e.target.value)} 
-                className="filter-select"
-             >
-                <option value="All">All Categories</option>
-                {categories.map((cat, i) => <option key={i} value={cat}>{cat}</option>)}
-             </select>
+    const fetchBatches = async (courseId) => {
+        try {
+            const response = await api.get(`courses/batches/?course=${courseId}`);
+            setCourseBatches(Array.isArray(response.data) ? response.data : []);
+        } catch (error) {
+            console.log("Error fetching batches", error);
+            setCourseBatches([{ id: 1, name: `${courseId}-A`, start_date: "2026-02-15" }]);
+        }
+    };
 
-             <button className="btn-glow pulse-animation hover-scale-press" onClick={handleCreateOpen}>
-                <span style={{marginRight: '8px', fontSize: '1.2rem'}}>+</span> Create New Course
-             </button>
-          </div>
-        </header>
+    const handleCreateOpen = () => {
+        setSelectedCourse(null);
+        setFormData({ title: "", code: "", instructor: "", duration: "12", price: "", level: "Beginner", category: categories[0], description: "", modules: 0, image: null });
+        setImagePreview(null);
+        setIsAddingCategory(false);
+        setActivePanel("create");
+    };
 
-        {/* COURSES GRID */}
-        <div className="courses-grid" style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '25px', paddingBottom: '30px'}}>
-            {filteredCourses.map((course, idx) => (
-                <div 
-                    key={course.id} 
-                    className="course-card fade-in-up" 
-                    style={{animationDelay: `${idx * 0.1}s`}}
-                    onClick={() => handleCardClick(course)}
-                >
-                    <div style={{height: '160px', borderRadius: '20px 20px 0 0', position: 'relative', overflow:'hidden'}}>
-                        <img src={course.image} alt="Course" style={{width:'100%', height:'100%', objectFit:'cover', transition:'0.5s'}} className="course-img"/>
-                        <div className="level-badge">{course.level}</div>
-                        <div className="category-tag">{course.category}</div>
+    const handleEdit = () => {
+        setFormData({
+            title: selectedCourse.title,
+            code: selectedCourse.code,
+            instructor: selectedCourse.instructor,
+            price: selectedCourse.price,
+            level: selectedCourse.level,
+            category: selectedCourse.category,
+            description: selectedCourse.description,
+            duration: "12",
+            modules: selectedCourse.modules,
+            image: selectedCourse.image
+        });
+        setImagePreview(selectedCourse.image);
+        setIsAddingCategory(false);
+        setActivePanel("create");
+    };
+
+    const handleImageUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setFormData({ ...formData, image: file });
+            setImagePreview(URL.createObjectURL(file));
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!selectedCourse) return;
+        if (!window.confirm("Are you sure?")) return;
+
+        try {
+            await api.delete(`courses/list/${selectedCourse.id}/`);
+            toast.success("Course Deleted Successfully! 🗑️");
+            setActivePanel("none");
+            fetchCourses();
+        } catch (error) {
+            toast.error("Failed to delete course");
+        }
+    };
+
+    const handleSave = async () => {
+        if (!formData.title) return toast.error("Title is required");
+        const loadToast = toast.loading("Saving...");
+
+        try {
+            const payload = {
+                name: formData.title,
+                code: formData.code,
+                description: formData.description,
+                fee_per_year: parseFloat(formData.price) || 0,
+                duration_months: parseInt(formData.duration) || 12,
+                is_active: true
+            };
+
+            const instRes = await api.get("institutions/");
+            const instData = Array.isArray(instRes.data) ? instRes.data : instRes.data.results || [];
+
+            if (instData.length > 0) {
+                payload.institution = instData[0].id;
+            } else {
+                toast.dismiss(loadToast);
+                return toast.error("No Institution found! Create one in admin first.");
+            }
+
+            if (selectedCourse) {
+                await api.patch(`courses/list/${selectedCourse.id}/`, payload);
+                toast.success("Course Updated! ✅", { id: loadToast });
+            } else {
+                await api.post("courses/list/", payload);
+                toast.success("Published Successfully! 🎉", { id: loadToast });
+            }
+
+            setActivePanel("none");
+            fetchCourses();
+        } catch (error) {
+            console.error("SAVE ERROR:", error.response?.data);
+            toast.error("Check fields: Required data missing.", { id: loadToast });
+        }
+    };
+
+    const handleAddNewCategory = () => {
+        if (!newCategoryName.trim()) return;
+        setCategories([...categories, newCategoryName]);
+        setFormData({ ...formData, category: newCategoryName });
+        setIsAddingCategory(false);
+        setNewCategoryName("");
+        toast.success(`Category '${newCategoryName}' Added!`);
+    };
+
+    const handleCreateBatch = async () => {
+        if (!newBatchName || !newBatchDate) return toast.error("Name and Date required!");
+        const loadToast = toast.loading("Creating Batch...");
+
+        try {
+            await api.post("courses/batches/", {
+                name: newBatchName,
+                course: selectedCourse.id,
+                start_date: newBatchDate,
+                whatsapp_group_link: newWhatsAppLink, // 🔥 WHATSAPP LINK ADDED HERE
+                is_active: true
+            });
+            toast.success("Batch created successfully! 🚀", { id: loadToast });
+            setNewBatchName("");
+            setNewBatchDate("");
+            setNewWhatsAppLink(""); // 🔥 RESET WHATSAPP LINK
+            fetchBatches(selectedCourse.id);
+        } catch (error) {
+            console.error("Batch Creation Error:", error);
+            toast.error("Failed to create batch", { id: loadToast });
+        }
+    };
+
+    const handleViewBatch = (batchObj) => {
+        setViewingBatch(batchObj);
+    };
+
+    const inputStyle = {
+        width: '100%', padding: '12px', borderRadius: '12px',
+        border: '1px solid #334155', background: '#1e293b',
+        color: '#ffffff', outline: 'none', fontSize: '0.9rem',
+        transition: '0.3s', boxSizing: 'border-box'
+    };
+
+    const inputStyleLight = {
+        width: '100%', padding: '10px 15px', borderRadius: '10px',
+        border: '1px solid #e2e8f0', background: '#f8fafc',
+        color: '#0f172a', outline: 'none', fontSize: '0.9rem',
+        marginBottom: '10px', boxSizing: 'border-box'
+    };
+
+    return (
+        <div className="courses-page-wrapper">
+            <div className="ambient-bg"></div>
+            <SidebarModern />
+            <Toaster position="top-center" />
+
+            <div className="courses-main-content">
+
+                <header className="slide-in-down courses-header">
+                    <div>
+                        <h1 className="gradient-text" style={{ fontSize: '2.5rem', fontWeight: '900', letterSpacing: '-1px', margin: 0 }}>Course Manager</h1>
+                        <p style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: '500', margin: '5px 0 0' }}>Create, manage and publish learning content.</p>
                     </div>
-                    
-                    <div style={{padding: '20px', background: 'white', borderRadius: '0 0 20px 20px', border: '1px solid #f1f5f9', borderTop: 'none'}}>
-                        <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px'}}>
-                            <span style={{fontSize: '0.8rem', color: '#6366f1', fontWeight: '700', background: '#eef2ff', padding: '4px 10px', borderRadius: '8px'}}>{course.code}</span>
-                            <span style={{fontSize: '0.8rem', color: '#f59e0b', fontWeight: '700'}}>★ {course.rating}</span>
-                        </div>
-                        
-                        <h3 style={{margin: '0 0 5px', color: '#1e293b', fontSize: '1.1rem'}}>{course.title}</h3>
-                        <p style={{margin: '0 0 15px', color: '#64748b', fontSize: '0.9rem'}}>by {course.instructor}</p>
-                        
-                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: '15px'}}>
-                            <div style={{display: 'flex', flexDirection: 'column'}}>
-                                <span style={{fontSize: '0.8rem', color: '#94a3b8', fontWeight: '600'}}>Price</span>
-                                <span style={{fontSize: '1.1rem', color: '#0f172a', fontWeight: '800'}}>₹{course.price}</span>
-                            </div>
-                            <button className="btn-icon-round hover-scale-press">➜</button>
-                        </div>
+
+                    <div className="header-actions">
+                        <select
+                            value={categoryFilter}
+                            onChange={(e) => setCategoryFilter(e.target.value)}
+                            className="filter-select"
+                        >
+                            <option value="All">All Categories</option>
+                            {categories.map((cat, i) => <option key={i} value={cat}>{cat}</option>)}
+                        </select>
+
+                        <button className="btn-glow pulse-animation hover-scale-press" onClick={handleCreateOpen}>
+                            <span style={{ marginRight: '8px', fontSize: '1.2rem' }}>+</span> Create New Course
+                        </button>
                     </div>
-                </div>
-            ))}
-        </div>
+                </header>
 
-        {/* --- SLIDING PANEL --- */}
-        {activePanel !== "none" && (
-            <div className="overlay-blur" onClick={() => setActivePanel("none")}>
-                <div className="luxe-panel slide-in-right" onClick={(e) => e.stopPropagation()}>
-                    
-                    <div className="panel-header-simple" style={{borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px'}}>
-                        <div>
-                            <h2 style={{margin: '0 0 5px', color: '#0f172a', fontWeight:'800', fontSize: '1.5rem'}}>
-                                {activePanel === 'create' ? (selectedCourse ? 'Edit Course' : 'Create Course') : 'Course Details'}
-                            </h2>
-                            <p style={{margin: 0, color: '#64748b', fontSize: '0.9rem'}}>
-                                {activePanel === 'create' ? 'Manage curriculum details.' : selectedCourse?.code}
-                            </p>
-                        </div>
-                        <button className="close-circle-btn hover-rotate" onClick={() => setActivePanel("none")}>✕</button>
-                    </div>
-
-                    {activePanel === 'create' && (
-                        <div className="panel-content-scroll">
-                            
-                            <div className="upload-box" style={{marginBottom: '20px', textAlign: 'center', border: '2px dashed #334155', padding: '20px', borderRadius: '12px', background: imagePreview ? `url(${imagePreview}) center/cover` : '#1e293b', position:'relative'}}>
-                                {!imagePreview && <span style={{color: '#94a3b8'}}>📁 Click to Upload Thumbnail</span>}
-                                <input type="file" accept="image/*" onChange={handleImageUpload} style={{opacity: 0, position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', cursor: 'pointer'}} />
+                <div className="courses-grid">
+                    {filteredCourses.map((course, idx) => (
+                        <div
+                            key={course.id}
+                            className="course-card fade-in-up"
+                            style={{ animationDelay: `${idx * 0.1}s` }}
+                            onClick={() => handleCardClick(course)}
+                        >
+                            <div style={{ height: '160px', borderRadius: '20px 20px 0 0', position: 'relative', overflow: 'hidden' }}>
+                                <img src={course.image} alt="Course" style={{ width: '100%', height: '100%', objectFit: 'cover', transition: '0.5s' }} className="course-img" />
+                                <div className="level-badge">{course.level}</div>
+                                <div className="category-tag">{course.category}</div>
                             </div>
 
-                            <div className="input-group"><label>Course Title</label><input type="text" placeholder="e.g. Master React JS" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} style={inputStyle} /></div>
-                            
-                            <div className="grid-2-col">
-                                <div className="input-group"><label>Course Code</label><input type="text" placeholder="CS-101" value={formData.code} onChange={(e) => setFormData({...formData, code: e.target.value})} style={inputStyle} /></div>
-                                <div className="input-group"><label>Instructor</label><input type="text" placeholder="Name" value={formData.instructor} onChange={(e) => setFormData({...formData, instructor: e.target.value})} style={inputStyle} /></div>
-                            </div>
-                            
-                            <div className="grid-2-col">
-                                <div className="input-group">
-                                    <div style={{display:'flex', justifyContent:'space-between', marginBottom:'5px'}}>
-                                        <label style={{margin:0}}>Category</label>
-                                        <span onClick={() => setIsAddingCategory(!isAddingCategory)} style={{color:'#3b82f6', fontSize:'0.8rem', cursor:'pointer', fontWeight:'600'}}>
-                                            {isAddingCategory ? "Select Existing" : "+ Add New"}
-                                        </span>
+                            <div style={{ padding: '20px', background: 'white', borderRadius: '0 0 20px 20px', border: '1px solid #f1f5f9', borderTop: 'none' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                    <span style={{ fontSize: '0.8rem', color: '#6366f1', fontWeight: '700', background: '#eef2ff', padding: '4px 10px', borderRadius: '8px' }}>{course.code}</span>
+                                    <span style={{ fontSize: '0.8rem', color: '#f59e0b', fontWeight: '700' }}>★ {course.rating}</span>
+                                </div>
+
+                                <h3 style={{ margin: '0 0 5px', color: '#1e293b', fontSize: '1.1rem' }}>{course.title}</h3>
+                                <p style={{ margin: '0 0 15px', color: '#64748b', fontSize: '0.9rem' }}>by {course.instructor}</p>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: '15px' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                        <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: '600' }}>Price</span>
+                                        <span style={{ fontSize: '1.1rem', color: '#0f172a', fontWeight: '800' }}>₹{course.price}</span>
                                     </div>
-                                    
-                                    {isAddingCategory ? (
-                                        <div style={{display:'flex', gap:'5px'}}>
-                                            <input type="text" placeholder="New Category Name" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} style={inputStyle} autoFocus />
-                                            <button onClick={handleAddNewCategory} style={{background:'#10b981', color:'white', border:'none', borderRadius:'12px', padding:'0 15px', cursor:'pointer'}}>✓</button>
+                                    <button className="btn-icon-round hover-scale-press">➜</button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* 🚀 COURSE EDIT / DETAIL MAIN PANEL */}
+                {activePanel !== "none" && (
+                    <div className="overlay-blur" onClick={() => setActivePanel("none")}>
+                        <div className="luxe-panel slide-in-right" onClick={(e) => e.stopPropagation()}>
+
+                            <div className="panel-header-simple" style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div>
+                                    <h2 style={{ margin: '0 0 5px', color: '#0f172a', fontWeight: '800', fontSize: '1.5rem' }}>
+                                        {activePanel === 'create' ? (selectedCourse ? 'Edit Course' : 'Create Course') : 'Course Details'}
+                                    </h2>
+                                    <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
+                                        {activePanel === 'create' ? 'Manage curriculum details.' : selectedCourse?.code}
+                                    </p>
+                                </div>
+                                <button className="close-circle-btn hover-rotate" onClick={() => setActivePanel("none")}>✕</button>
+                            </div>
+
+                            {activePanel === 'create' && (
+                                <div className="panel-content-scroll">
+
+                                    <div className="upload-box" style={{ marginBottom: '20px', textAlign: 'center', border: '2px dashed #334155', padding: '20px', borderRadius: '12px', background: imagePreview ? `url(${imagePreview}) center/cover` : '#1e293b', position: 'relative', minHeight: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        {!imagePreview && <span style={{ color: '#94a3b8' }}>📁 Click to Upload Thumbnail</span>}
+                                        <input type="file" accept="image/*" onChange={handleImageUpload} style={{ opacity: 0, position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
+                                    </div>
+
+                                    <div className="input-group"><label>Course Title</label><input type="text" placeholder="e.g. Master React JS" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} style={inputStyle} /></div>
+
+                                    <div className="grid-2-col">
+                                        <div className="input-group"><label>Course Code</label><input type="text" placeholder="CS-101" value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} style={inputStyle} /></div>
+                                        <div className="input-group"><label>Instructor</label><input type="text" placeholder="Name" value={formData.instructor} onChange={(e) => setFormData({ ...formData, instructor: e.target.value })} style={inputStyle} /></div>
+                                    </div>
+
+                                    <div className="grid-2-col">
+                                        <div className="input-group">
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                                                <label style={{ margin: 0, color: '#fff' }}>Category</label>
+                                                <span onClick={() => setIsAddingCategory(!isAddingCategory)} style={{ color: '#3b82f6', fontSize: '0.8rem', cursor: 'pointer', fontWeight: '600' }}>
+                                                    {isAddingCategory ? "Select Existing" : "+ Add New"}
+                                                </span>
+                                            </div>
+
+                                            {isAddingCategory ? (
+                                                <div style={{ display: 'flex', gap: '5px' }}>
+                                                    <input type="text" placeholder="New Category Name" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} style={inputStyle} autoFocus />
+                                                    <button onClick={handleAddNewCategory} style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '12px', padding: '0 15px', cursor: 'pointer' }}>✓</button>
+                                                </div>
+                                            ) : (
+                                                <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} style={inputStyle}>
+                                                    {categories.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
+                                                </select>
+                                            )}
                                         </div>
-                                    ) : (
-                                        <select value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} style={inputStyle}>
-                                            {categories.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
-                                        </select>
+
+                                        <div className="input-group"><label style={{ color: '#fff' }}>Level</label>
+                                            <select value={formData.level} onChange={(e) => setFormData({ ...formData, level: e.target.value })} style={inputStyle}>
+                                                <option>Beginner</option>
+                                                <option>Intermediate</option>
+                                                <option>Advanced</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid-2-col">
+                                        <div className="input-group"><label style={{ color: '#fff' }}>Price (₹)</label><input type="number" placeholder="4999" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} style={inputStyle} /></div>
+                                        <div className="input-group"><label style={{ color: '#fff' }}>Duration (Months)</label><input type="number" placeholder="12" value={formData.duration} onChange={(e) => setFormData({ ...formData, duration: e.target.value })} style={inputStyle} /></div>
+                                    </div>
+
+                                    <div className="input-group"><label style={{ color: '#fff' }}>Description</label><textarea rows="4" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Course details..." style={{ ...inputStyle, resize: 'none' }}></textarea></div>
+
+                                    <button className="btn-confirm-gradient hover-lift" onClick={handleSave} style={{ width: '100%', padding: '16px', fontSize: '1rem', marginTop: '20px' }}>
+                                        {selectedCourse ? 'Update Course' : '✨ Publish Course'}
+                                    </button>
+                                </div>
+                            )}
+
+                            {activePanel === 'detail' && selectedCourse && (
+                                <div className="panel-content-scroll">
+                                    <div style={{ height: '200px', borderRadius: '20px', overflow: 'hidden', marginBottom: '20px', position: 'relative' }}>
+                                        <img src={selectedCourse.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Course" />
+                                        <div style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)', padding: '20px' }}>
+                                            <span style={{ background: '#6366f1', color: 'white', padding: '4px 10px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: '700' }}>{selectedCourse.category}</span>
+                                            <h2 style={{ fontSize: '1.8rem', fontWeight: '800', margin: '10px 0 0', color: 'white' }}>{selectedCourse.title}</h2>
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'flex', gap: '10px', marginBottom: '25px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
+                                        <button className={`tab-text ${panelTab === 'overview' ? 'active' : ''}`} onClick={() => setPanelTab('overview')}>Overview</button>
+                                        <button className={`tab-text ${panelTab === 'curriculum' ? 'active' : ''}`} onClick={() => setPanelTab('curriculum')}>Curriculum</button>
+                                        <button className={`tab-text ${panelTab === 'batches' ? 'active' : ''}`} onClick={() => setPanelTab('batches')}>Batches</button>
+                                    </div>
+
+                                    {panelTab === 'overview' && (
+                                        <div className="fade-in-up">
+                                            <h4 style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: '700', marginBottom: '10px', textTransform: 'uppercase' }}>Description</h4>
+                                            <p style={{ color: '#334155', lineHeight: '1.6', fontSize: '0.95rem', marginBottom: '25px' }}>
+                                                {selectedCourse.description || "This comprehensive course covers everything from basics to advanced concepts."}
+                                            </p>
+
+                                            <div className="grid-2-col" style={{ background: '#f8fafc', padding: '15px', borderRadius: '16px' }}>
+                                                <div><small style={{ color: '#64748b' }}>Students</small><h3 style={{ margin: 0, color: '#0f172a' }}>{selectedCourse.students}</h3></div>
+                                                <div><small style={{ color: '#64748b' }}>Modules</small><h3 style={{ margin: 0, color: '#0f172a' }}>{selectedCourse.modules}</h3></div>
+                                                <div><small style={{ color: '#64748b' }}>Rating</small><h3 style={{ margin: 0, color: '#f59e0b' }}>{selectedCourse.rating} ★</h3></div>
+                                                <div><small style={{ color: '#64748b' }}>Price</small><h3 style={{ margin: 0, color: '#10b981' }}>₹{selectedCourse.price}</h3></div>
+                                            </div>
+                                        </div>
                                     )}
+
+                                    {panelTab === 'curriculum' && (
+                                        <div className="fade-in-up">
+                                            {[1, 2, 3, 4].map(i => (
+                                                <div key={i} style={{ padding: '15px', border: '1px solid #e2e8f0', borderRadius: '12px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <div>
+                                                        <h5 style={{ margin: 0, color: '#0f172a' }}>Module {i}: Introduction & Setup</h5>
+                                                        <small style={{ color: '#64748b' }}>3 Video Lectures • 45 Mins</small>
+                                                    </div>
+                                                    <span style={{ fontSize: '1.2rem', color: '#cbd5e1' }}>▶</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {panelTab === 'batches' && (
+                                        <div className="fade-in-up">
+                                            <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px', marginBottom: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                                                <h4 style={{ margin: '0 0 15px', color: '#0f172a' }}>Create New Batch</h4>
+                                                <div className="grid-2-col batch-inputs-container" style={{ marginBottom: 0 }}>
+                                                    <input type="text" placeholder="Batch Name (e.g. Morning 2026)" value={newBatchName} onChange={(e) => setNewBatchName(e.target.value)} style={inputStyleLight} />
+                                                    <input type="date" value={newBatchDate} onChange={(e) => setNewBatchDate(e.target.value)} style={inputStyleLight} />
+                                                </div>
+                                                {/* 🔥 NEW WHATSAPP LINK INPUT */}
+                                                <div style={{ marginTop: '10px' }}>
+                                                    <input type="url" placeholder="WhatsApp Group Link (Optional)" value={newWhatsAppLink} onChange={(e) => setNewWhatsAppLink(e.target.value)} style={inputStyleLight} />
+                                                </div>
+                                                <button onClick={handleCreateBatch} className="btn-confirm-gradient hover-lift" style={{ width: '100%', padding: '10px', marginTop: '10px', borderRadius: '10px' }}>+ Add Batch</button>
+                                            </div>
+
+                                            <h4 style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: '700', marginBottom: '10px', textTransform: 'uppercase' }}>Active Batches</h4>
+
+                                            {courseBatches.length > 0 ? courseBatches.map((b, i) => (
+                                                <div key={i} className="batch-list-item" style={{ padding: '15px', border: '1px solid #e2e8f0', borderRadius: '12px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', transition: '0.2s' }}>
+                                                    <div>
+                                                        <h5 style={{ margin: 0, color: '#0f172a', fontSize: '1rem' }}>{b.name}</h5>
+                                                        <small style={{ color: '#64748b', fontWeight: '500' }}>Starts: {b.start_date}</small>
+                                                    </div>
+
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                        {/* 🔥 Quick WhatsApp Badge Indicator */}
+                                                        {b.whatsapp_group_link && <span style={{ color: '#10b981', fontSize: '1.2rem' }} title="WhatsApp Group Linked">💬</span>}
+
+                                                        <span style={{ background: '#e0e7ff', color: '#4f46e5', padding: '4px 10px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: '700' }}>Active</span>
+
+                                                        <button
+                                                            className="eye-action-btn"
+                                                            title="View Batch Details"
+                                                            onClick={() => handleViewBatch(b)}
+                                                            style={{ fontSize: '1.2rem', lineHeight: '1', paddingBottom: '2px' }}
+                                                        >
+                                                            👁️
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )) : (
+                                                <p style={{ textAlign: 'center', color: '#94a3b8', padding: '20px' }}>No active batches found for this course.</p>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <div className="panel-footer-actions" style={{ marginTop: '30px', display: 'flex', gap: '10px' }}>
+                                        <button className="btn-confirm-gradient hover-lift" style={{ flex: 1 }} onClick={handleEdit}>Edit Course ✏️</button>
+                                        <button className="btn-glow hover-lift" style={{ flex: 1, background: '#fee2e2', color: '#dc2626' }} onClick={handleDelete}>Delete 🗑️</button>
+                                    </div>
                                 </div>
-                                
-                                <div className="input-group"><label>Level</label>
-                                    <select value={formData.level} onChange={(e) => setFormData({...formData, level: e.target.value})} style={inputStyle}>
-                                        <option>Beginner</option>
-                                        <option>Intermediate</option>
-                                        <option>Advanced</option>
-                                    </select>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* 🚀 NEW MODAL: BATCH VIEW UI */}
+                {viewingBatch && (
+                    <div className="overlay-blur" style={{ zIndex: 3000, justifyContent: 'center', alignItems: 'center' }} onClick={() => setViewingBatch(null)}>
+                        <div className="luxe-modal fade-in-up" style={{ width: '400px', height: 'auto', borderRadius: '24px', padding: '30px', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }} onClick={(e) => e.stopPropagation()}>
+                            <button className="close-circle-btn hover-rotate" style={{ position: 'absolute', top: '20px', right: '20px' }} onClick={() => setViewingBatch(null)}>✕</button>
+
+                            <div style={{ textAlign: 'center', marginBottom: '25px', marginTop: '10px' }}>
+                                <div style={{ width: '70px', height: '70px', background: '#eef2ff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 15px' }}>
+                                    <span style={{ fontSize: '1.8rem' }}>📁</span>
                                 </div>
+                                <h2 style={{ margin: '0 0 8px', color: '#0f172a', fontWeight: '800', fontSize: '1.6rem' }}>{viewingBatch.name}</h2>
+                                <span style={{ background: '#e0e7ff', color: '#4f46e5', padding: '5px 14px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: '700' }}>Active System Batch</span>
                             </div>
 
-                            <div className="grid-2-col">
-                                <div className="input-group"><label>Price (₹)</label><input type="number" placeholder="4999" value={formData.price} onChange={(e) => setFormData({...formData, price: e.target.value})} style={inputStyle} /></div>
-                                <div className="input-group"><label>Duration</label><input type="text" placeholder="e.g. 3 Months" value={formData.duration} onChange={(e) => setFormData({...formData, duration: e.target.value})} style={inputStyle} /></div>
+                            <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', borderBottom: '1px dashed #cbd5e1', paddingBottom: '12px' }}>
+                                    <span style={{ color: '#64748b', fontWeight: '600', fontSize: '0.9rem' }}>Start Date</span>
+                                    <span style={{ color: '#0f172a', fontWeight: '800', fontSize: '0.95rem' }}>{viewingBatch.start_date}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: viewingBatch.whatsapp_group_link ? '15px' : '0', borderBottom: viewingBatch.whatsapp_group_link ? '1px dashed #cbd5e1' : 'none', paddingBottom: viewingBatch.whatsapp_group_link ? '12px' : '0' }}>
+                                    <span style={{ color: '#64748b', fontWeight: '600', fontSize: '0.9rem' }}>Course Code</span>
+                                    <span style={{ color: '#0f172a', fontWeight: '800', fontSize: '0.95rem' }}>{selectedCourse?.code}</span>
+                                </div>
+                                {/* 🔥 DISPLAY WHATSAPP LINK IF EXISTS */}
+                                {viewingBatch.whatsapp_group_link && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                        <span style={{ color: '#64748b', fontWeight: '600', fontSize: '0.9rem' }}>WhatsApp Group</span>
+                                        <a href={viewingBatch.whatsapp_group_link} target="_blank" rel="noreferrer" style={{ color: '#10b981', fontWeight: '800', fontSize: '0.85rem', wordBreak: 'break-all' }}>
+                                            {viewingBatch.whatsapp_group_link}
+                                        </a>
+                                    </div>
+                                )}
                             </div>
 
-                            <div className="input-group"><label>Description</label><textarea rows="4" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} placeholder="Course details..." style={{...inputStyle, resize:'none'}}></textarea></div>
-                            
-                            <button className="btn-confirm-gradient hover-lift" onClick={handleSave} style={{width: '100%', padding: '16px', fontSize: '1rem', marginTop:'20px'}}>
-                                {selectedCourse ? 'Update Course' : '✨ Publish Course'}
+                            <button className="btn-confirm-gradient hover-lift" style={{ width: '100%', padding: '14px', marginTop: '25px', borderRadius: '14px', fontSize: '1rem' }} onClick={() => setViewingBatch(null)}>
+                                Close Details
                             </button>
                         </div>
-                    )}
+                    </div>
+                )}
 
-                    {activePanel === 'detail' && selectedCourse && (
-                        <div className="panel-content-scroll">
-                            <div style={{height: '200px', borderRadius: '20px', overflow: 'hidden', marginBottom: '20px', position: 'relative'}}>
-                                <img src={selectedCourse.image} style={{width: '100%', height: '100%', objectFit: 'cover'}} alt="Course" />
-                                <div style={{position: 'absolute', bottom: 0, left: 0, width: '100%', background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)', padding: '20px'}}>
-                                    <span style={{background:'#6366f1', color:'white', padding:'4px 10px', borderRadius:'10px', fontSize:'0.75rem', fontWeight:'700'}}>{selectedCourse.category}</span>
-                                    <h2 style={{fontSize: '1.8rem', fontWeight: '800', margin: '10px 0 0', color: 'white'}}>{selectedCourse.title}</h2>
-                                </div>
-                            </div>
-
-                            <div style={{display: 'flex', gap: '10px', marginBottom: '25px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px'}}>
-                                <button className={`tab-text ${panelTab==='overview'?'active':''}`} onClick={()=>setPanelTab('overview')}>Overview</button>
-                                <button className={`tab-text ${panelTab==='curriculum'?'active':''}`} onClick={()=>setPanelTab('curriculum')}>Curriculum</button>
-                            </div>
-
-                            {panelTab === 'overview' && (
-                                <div className="fade-in-up">
-                                    <h4 style={{color:'#64748b', fontSize:'0.85rem', fontWeight:'700', marginBottom:'10px', textTransform:'uppercase'}}>Description</h4>
-                                    <p style={{color:'#334155', lineHeight:'1.6', fontSize:'0.95rem', marginBottom:'25px'}}>
-                                        {selectedCourse.description || "This comprehensive course covers everything from basics to advanced concepts."}
-                                    </p>
-
-                                    <div className="grid-2-col" style={{background:'#f8fafc', padding:'15px', borderRadius:'16px'}}>
-                                        <div><small style={{color:'#64748b'}}>Students</small><h3 style={{margin:0, color:'#0f172a'}}>{selectedCourse.students}</h3></div>
-                                        <div><small style={{color:'#64748b'}}>Modules</small><h3 style={{margin:0, color:'#0f172a'}}>{selectedCourse.modules}</h3></div>
-                                        <div><small style={{color:'#64748b'}}>Rating</small><h3 style={{margin:0, color:'#f59e0b'}}>{selectedCourse.rating} ★</h3></div>
-                                        <div><small style={{color:'#64748b'}}>Price</small><h3 style={{margin:0, color:'#10b981'}}>₹{selectedCourse.price}</h3></div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {panelTab === 'curriculum' && (
-                                <div className="fade-in-up">
-                                    {[1, 2, 3, 4].map(i => (
-                                        <div key={i} style={{padding: '15px', border: '1px solid #e2e8f0', borderRadius: '12px', marginBottom: '10px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                                            <div>
-                                                <h5 style={{margin:0, color:'#0f172a'}}>Module {i}: Introduction & Setup</h5>
-                                                <small style={{color:'#64748b'}}>3 Video Lectures • 45 Mins</small>
-                                            </div>
-                                            <span style={{fontSize:'1.2rem', color:'#cbd5e1'}}>▶</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            <div style={{marginTop: '30px', display:'flex', gap:'10px'}}>
-                                <button className="btn-confirm-gradient hover-lift" style={{flex: 1}} onClick={handleEdit}>Edit Course ✏️</button>
-                                <button className="btn-glow hover-lift" style={{flex: 1, background:'#fee2e2', color:'#dc2626'}} onClick={handleDelete}>Delete 🗑️</button>
-                            </div>
-                        </div>
-                    )}
-                </div>
             </div>
-        )}
 
-        {showSuccess && (
-          <div className="overlay-blur centered-flex" style={{zIndex: 3000}}>
-              <div className="glass-card bounce-in success-card-luxe">
-                <div className="success-ring-luxe"><span className="checkmark-anim">L</span></div>
-                <h2 style={{fontSize: '1.5rem', fontWeight: '900', margin: '20px 0 10px', color: '#0f172a'}}>Success!</h2>
-                <p style={{color: '#64748b', fontSize: '1rem', margin: 0}}>{notificationMsg}</p>
-              </div>
-          </div>
-        )}
+            {/* 🚀 CSS FOR 100% RESPONSIVENESS */}
+            <style>{`
+        /* Avoid Body scroll locking */
+        .courses-page-wrapper { 
+            overflow-x: hidden; 
+            width: 100%; 
+            display: flex; 
+            flex-direction: row; 
+            background: #f8fafc;
+            min-height: 100vh;
+            position: relative;
+        }
 
-      </div>
+        /* ✅ THE ULTIMATE FIX FOR DESKTOP OVERLAP */
+        .courses-main-content {
+            flex: 1;
+            padding: 30px 40px;
+            overflow-y: auto;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            z-index: 1;
+            box-sizing: border-box;
+            margin-left: 280px; /* <--- YE LINE NE OVERLAP FIX KIYA HAI */
+            transition: margin-left 0.3s ease;
+        }
 
-      <style>{`
-        .gradient-text { background: linear-gradient(135deg, #0f172a 0%, #334155 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .course-card { border-radius: 20px; transition: 0.3s; cursor: pointer; background: white; overflow: hidden; }
-        .course-card:hover { transform: translateY(-8px); box-shadow: 0 20px 40px -10px rgba(0,0,0,0.1); }
-        .course-img:hover { transform: scale(1.05); }
-
-        .level-badge { position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
-        .category-tag { position: absolute; bottom: 15px; left: 15px; background: #6366f1; color: white; padding: 4px 10px; border-radius: 8px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
-
-        .btn-icon-round { width: 40px; height: 40px; border-radius: 50%; background: #0f172a; color: white; border: none; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .tab-text { background: transparent; border: none; font-weight: 600; color: #94a3b8; font-size: 1rem; padding: 0 10px 10px; cursor: pointer; transition: 0.2s; border-bottom: 2px solid transparent; }
-        .tab-text.active { color: #0f172a; border-bottom: 2px solid #0f172a; }
-        
-        .filter-select { padding: 10px 15px; border-radius: 30px; border: 1px solid #cbd5e1; outline: none; background: white; color: #334155; font-weight: 600; cursor: pointer; }
-
-        @keyframes slideInDown { from { opacity: 0; transform: translateY(-40px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeDown { from { opacity: 0; transform: translateY(-30px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes pulseBlue { 0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); } 70% { box-shadow: 0 0 0 12px rgba(99, 102, 241, 0); } 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); } }
-        @keyframes checkPop { 0% { transform: scale(0); } 80% { transform: scale(1.2); } 100% { transform: scale(1); } }
-        @keyframes rotateAmbient { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        @keyframes bounceIn { 0% { transform: scale(0.8); opacity: 0; } 60% { transform: scale(1.05); opacity: 1; } 100% { transform: scale(1); } }
-
-        .slide-in-down { animation: slideInDown 0.7s cubic-bezier(0.2, 0.8, 0.2, 1); }
-        .fade-in-up { animation: fadeUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+        
+        .slide-in-down { animation: fadeDown 0.7s cubic-bezier(0.2, 0.8, 0.2, 1); }
+        .fade-in-up { animation: fadeUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; opacity: 0; } 
         .slide-in-right { animation: slideRight 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
         .pulse-animation { animation: pulseBlue 2s infinite; }
-        .bounce-in { animation: bounceIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        
+        .ambient-bg { position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle at center, rgba(99,102,241,0.05) 0%, rgba(248,250,252,0) 60%); z-index: 0; pointer-events: none; }
 
-        .ambient-bg { position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle at center, rgba(99,102,241,0.08) 0%, rgba(248,250,252,0) 60%), radial-gradient(circle at 80% 20%, rgba(16,185,129,0.05) 0%, transparent 50%); animation: rotateAmbient 60s linear infinite; z-index: 0; pointer-events: none; }
+        .hover-scale { transition: transform 0.2s; }
+        .hover-scale:hover { transform: scale(1.05); }
+        .hover-lift { transition: transform 0.2s, box-shadow 0.2s; }
+        .hover-lift:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        .hover-rotate { transition: transform 0.3s; }
+        .hover-rotate:hover { transform: rotate(90deg); background: #e2e8f0; }
+
+        .courses-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 35px; flex-shrink: 0; }
+        .header-actions { display: flex; gap: 15px; }
+        
+        .gradient-text { background: linear-gradient(135deg, #0f172a 0%, #334155 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .course-card { border-radius: 20px; transition: 0.3s; cursor: pointer; background: white; overflow: hidden; border: 1px solid #e2e8f0; }
+        .course-card:hover { transform: translateY(-8px); box-shadow: 0 20px 40px -10px rgba(0,0,0,0.1); }
+        .course-img:hover { transform: scale(1.05); }
+        .level-badge { position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
+        .category-tag { position: absolute; bottom: 15px; left: 15px; background: #6366f1; color: white; padding: 4px 10px; border-radius: 8px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
+        .btn-icon-round { width: 40px; height: 40px; border-radius: 50%; background: #0f172a; color: white; border: none; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        
+        .tab-text { background: transparent; border: none; font-weight: 600; color: #94a3b8; font-size: 1rem; padding: 0 10px 10px; cursor: pointer; transition: 0.2s; border-bottom: 2px solid transparent; }
+        .tab-text.active { color: #0f172a; border-bottom: 2px solid #0f172a; }
+        .filter-select { padding: 10px 15px; border-radius: 30px; border: 1px solid #cbd5e1; outline: none; background: white; color: #334155; font-weight: 600; cursor: pointer; }
         
         .overlay-blur { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); z-index: 2000; display: flex; justify-content: flex-end; }
-        .luxe-panel { width: 500px; height: 100%; background: white; padding: 35px; display: flex; flex-direction: column; box-shadow: -20px 0 60px rgba(0,0,0,0.15); overflow-y: auto; }
-        .panel-header-simple { display: flex; justify-content: space-between; alignItems: flex-start; }
-        .close-circle-btn { width: 36px; height: 36px; border-radius: 50%; background: #f1f5f9; border: none; cursor: pointer; color: #64748b; font-size: 1rem; }
-
+        .luxe-panel { width: 500px; height: 100%; background: white; padding: 35px; display: flex; flex-direction: column; box-shadow: -20px 0 60px rgba(0,0,0,0.15); overflow-y: auto; box-sizing: border-box; }
+        .luxe-modal { background: white; max-width: 90vw; }
+        .close-circle-btn { width: 36px; height: 36px; border-radius: 50%; background: #f1f5f9; border: none; cursor: pointer; color: #64748b; font-size: 1rem; transition: 0.2s; display: flex; align-items: center; justify-content: center;}
+        .close-circle-btn:hover { background: #e2e8f0; color: #0f172a; transform: rotate(90deg); }
+        
         .btn-confirm-gradient { background: linear-gradient(135deg, #0f172a 0%, #334155 100%); border: none; color: white; border-radius: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 10px 20px rgba(15, 23, 42, 0.2); }
         .btn-glow { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); border: none; color: white; padding: 10px 22px; border-radius: 50px; font-weight: 700; cursor: pointer; box-shadow: 0 8px 15px rgba(99, 102, 241, 0.25); display: flex; align-items: center; font-size: 0.9rem; }
-
-        .success-card-luxe { background: white; padding: 40px; border-radius: 30px; text-align: center; width: 380px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
-        .success-ring-luxe { width: 100px; height: 100px; background: linear-gradient(135deg, #ecfdf5, #d1fae5); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto; animation: checkPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        .checkmark-anim { font-size: 3.5rem; color: #10b981; transform: rotate(45deg) scaleX(-1); display: inline-block; }
-        .centered-flex { display: flex; alignItems: center; justifyContent: center; }
         .hover-scale-press:hover { transform: scale(1.03); transition: 0.1s; }
-        .hover-rotate:hover { transform: rotate(90deg); background: #e2e8f0; transition: 0.2s; }
+        
+        .courses-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 25px; padding-bottom: 30px; }
         .grid-2-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-        .input-group label { display: block; font-size: 0.85rem; color: #64748b; font-weight: 700; margin-bottom: 8px; letter-spacing: 0.3px; }
+        
+        .batch-list-item:hover { background: #ffffff !important; border-color: #cbd5e1 !important; box-shadow: 0 4px 12px rgba(0,0,0,0.03); transform: translateY(-2px); }
+        .eye-action-btn { background: white; border: 1px solid #e2e8f0; border-radius: 8px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; color: #4f46e5; cursor: pointer; transition: 0.2s; }
+        .eye-action-btn:hover { background: #f8fafc; border-color: #cbd5e1; transform: scale(1.05); box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+
+        /* 📱 TABLET & MOBILE MEDIA QUERIES */
+        @media (max-width: 1024px) {
+            /* Mobile par Sidebar hide ho jata hai ya hamburger banta hai, isliye margin hata do */
+            .courses-main-content { margin-left: 0; padding: 20px; padding-top: 80px; }
+            .courses-header { flex-direction: column; align-items: flex-start; gap: 15px; }
+            .header-actions { width: 100%; flex-direction: column; align-items: stretch; }
+            .filter-select { width: 100%; }
+            .btn-glow { justify-content: center; }
+            .luxe-panel { width: 100%; padding: 20px; }
+        }
+
+        @media (max-width: 768px) {
+            .grid-2-col { grid-template-columns: 1fr; gap: 15px; }
+            .batch-inputs-container { display: flex; flex-direction: column; }
+            .panel-footer-actions { flex-direction: column; }
+        }
       `}</style>
-    </div>
-  );
+        </div>
+    );
 }

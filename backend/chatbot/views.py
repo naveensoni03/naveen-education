@@ -1,103 +1,60 @@
 ﻿from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.permissions import AllowAny  # 🚀 Chatbot ko 401 error se bachane ke liye
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
-import google.generativeai as genai
-from datetime import datetime, timedelta
-import threading
+from google import genai
 
-API_KEY = "YOUR_API_KEY_HERE"
-genai.configure(api_key=API_KEY)
+# 🛑 YAHAN APNI NAYI WALI API KEY DAALIYE (Quotes ke andar)
+API_KEY = "AIzaSyDU1H-hSM8Mu8SS1dxJv9yJtMMR-KoEd2o" 
 
-# 🔒 Global state
-CACHED_MODEL = None
-LAST_MODEL_CHECK = None
-QUOTA_BLOCKED = False
-QUOTA_RESET_TIME = None
-LOCK = threading.Lock()
+try:
+    client = genai.Client(api_key=API_KEY)
+except Exception as e:
+    print("❌ Client Setup Error:", e)
+    client = None
 
 @method_decorator(csrf_exempt, name='dispatch')
 class AIChatAPI(APIView):
+    permission_classes = [AllowAny] # 🚀 Isse 401 Unauthorized kabhi nahi aayega
+
     def post(self, request):
-        global CACHED_MODEL, LAST_MODEL_CHECK, QUOTA_BLOCKED, QUOTA_RESET_TIME
+        if not client:
+            return Response({"reply": "⚠️ Backend Error: API Key missing ya setup fail hua."})
 
         user_message = request.data.get('message', '').strip()
-        current_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
 
-        system_instruction = (
-            f"Current Time: {current_time}. "
-            "You are Shivadda AI, an expert academic tutor. "
-            "Only answer coding, math, science, and education-related questions. "
-            "Be concise and helpful."
-        )
+        if not user_message:
+            return Response({"reply": "Please ask a question!"})
 
-        # 🔕 HARD BLOCK IF QUOTA HIT
-        with LOCK:
-            if QUOTA_BLOCKED:
-                if QUOTA_RESET_TIME and datetime.now() < QUOTA_RESET_TIME:
-                    return Response({
-                        "reply": "⚠️ AI daily limit reached. I'm still here — ask coding, math, or science questions and I'll respond normally!"
-                    })
-                else:
-                    # Reset block after wait
-                    QUOTA_BLOCKED = False
-                    QUOTA_RESET_TIME = None
-
-        # 🔍 MODEL SELECT (CACHED)
         try:
-            if not CACHED_MODEL or not LAST_MODEL_CHECK or datetime.now() - LAST_MODEL_CHECK > timedelta(hours=6):
-                models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
-                preference = [
-                    "models/gemini-2.0-flash",
-                    "models/gemini-flash-latest",
-                    "models/gemini-pro-latest"
-                ]
-                for p in preference:
-                    if p in models:
-                        CACHED_MODEL = p
-                        break
-                if not CACHED_MODEL and models:
-                    CACHED_MODEL = models[0]
-                LAST_MODEL_CHECK = datetime.now()
-
-        except Exception:
-            CACHED_MODEL = None
-
-        # 🚫 If no model found
-        if not CACHED_MODEL:
-            return Response({"reply": "AI temporarily unavailable. Please try later."})
-
-        # 🚀 GENERATE RESPONSE
-        try:
-            model = genai.GenerativeModel(
-                model_name=CACHED_MODEL,
-                system_instruction=system_instruction
+            full_prompt = (
+                "Act as Shivadda AI, an expert educational tutor. Be polite, concise, and helpful.\n\n"
+                f"User Question: {user_message}"
             )
-
-            response = model.generate_content(
-                user_message,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.7,
-                    max_output_tokens=300
-                )
+            
+            # 🚀 FIX: Wapas sabse latest model laga diya! Nayi key ke sath ye 100% chalega.
+            response = client.models.generate_content(
+                model="gemini-2.0-flash", 
+                contents=full_prompt
             )
 
             if response.text:
                 return Response({"reply": response.text})
-
-            return Response({"reply": "No response generated."})
+            
+            return Response({"reply": "Sorry, I couldn't generate a response right now."})
 
         except Exception as e:
-            error_msg = str(e).lower()
+            exact_error = str(e)
+            print("❌ ASLI GOOGLE ERROR:", exact_error)
+            
+            # 🚀 AB ERROR HIDE NAHI HOGA! UI PAR EXACT ERROR DIKHEGA
+            if "429" in exact_error or "RESOURCE_EXHAUSTED" in exact_error:
+                 return Response({"reply": "⚠️ Limit Reached: Is key ki free limit khatam ho chuki hai."})
+            elif "400" in exact_error or "API_KEY_INVALID" in exact_error:
+                 return Response({"reply": "🚨 Invalid API Key: Please apni API key check karein."})
+            else:
+                 # Agar koi aur naya error aata hai, toh wo seedha chatbot screen par text ban kar aayega!
+                 return Response({"reply": f"🤖 Google API Error: {exact_error}"})
 
-            # 🛑 QUOTA HIT — PERMANENT BLOCK MODE
-            if "quota" in error_msg or "429" in error_msg:
-                with LOCK:
-                    QUOTA_BLOCKED = True
-                    QUOTA_RESET_TIME = datetime.now() + timedelta(seconds=60)
 
-                return Response({
-                    "reply": "⚠️ AI daily limit reached. I'm still here — ask coding, math, or science questions and I'll respond normally!"
-                })
-
-            return Response({"reply": "System error. Please try again."})

@@ -5,7 +5,7 @@
 
   color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  background-color: #f3f4f6; /* Dashboard theme color */
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -22,12 +22,14 @@ a:hover {
   color: #535bf2;
 }
 
+/* 🔥 FIX 1: Body ko theek kiya taaki content center mein na atke */
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
+  display: block !important; 
+  place-items: unset !important;
   min-width: 320px;
   min-height: 100vh;
+  background-color: #f3f4f6 !important;
 }
 
 h1 {
@@ -54,6 +56,14 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
+/* 🔥 FIX 2: Root container ko full screen kiya */
+#root {
+  max-width: 100% !important;
+  margin: 0;
+  padding: 0 !important;
+  text-align: left !important;
+}
+
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
@@ -65,4 +75,91 @@ button:focus-visible {
   button {
     background-color: #f9f9f9;
   }
+}
+
+/* =========================================
+   📱 MOBILE RESPONSIVENESS (Global Fixes)
+========================================= */
+
+/* Desktop par Header & Close Button chhupe rahenge */
+.mobile-header { display: none; }
+.mobile-overlay { display: none; }
+.mobile-close-btn { display: none; }
+.custom-sidebar { left: 0; transition: left 0.3s ease-in-out; }
+
+/* Mobile Screen (Jab screen choti ho) */
+@media (max-width: 850px) {
+    
+    /* 🚀 THE MASTER HACK: Ye code bina kisi React file ko chhede, 
+       us 280px ki empty space ko mobile par hamesha ke liye mita dega! */
+    div[style*="margin-left: 280px"],
+    div[style*="marginLeft: 280px"],
+    div[style*="margin-left:280px"] {
+        margin-left: 0 !important;
+        width: 100% !important;
+        padding-top: 90px !important;
+        padding-left: 15px !important;
+        padding-right: 15px !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Institutions ya baaki pages ke liye bhi same fix */
+    .waoo-view {
+        margin-left: 0 !important;
+        padding: 15px !important;
+        padding-top: 90px !important; 
+        width: 100% !important;
+        box-sizing: border-box;
+    }
+
+    /* Show Mobile Header */
+    .mobile-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #ffffff;
+        padding: 15px 20px;
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        z-index: 998;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .mobile-menu-btn { background: transparent; border: none; padding: 0; cursor: pointer; outline: none; }
+    .mobile-menu-btn:hover { background: transparent; border: none; }
+
+    /* Hide Sidebar by Default on Mobile */
+    .custom-sidebar {
+        left: -320px !important; 
+        box-shadow: 20px 0 50px rgba(0,0,0,0.1);
+    }
+    
+    /* Open Sidebar */
+    .custom-sidebar.open {
+        left: 0 !important; 
+    }
+
+    /* Black Overlay */
+    .mobile-overlay {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(4px);
+        z-index: 999;
+    }
+
+    /* Close Button inside Sidebar */
+    .mobile-close-btn {
+        display: flex;
+        position: absolute;
+        right: 15px;
+        top: 25px;
+        background: #f1f5f9;
+        border: none;
+        padding: 8px;
+        border-radius: 10px;
+        cursor: pointer;
+    }
 }

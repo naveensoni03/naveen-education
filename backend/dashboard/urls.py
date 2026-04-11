@@ -1,9 +1,7 @@
 from django.urls import path
-from . import views
+from .views import DashboardStatsAPIView
 
 urlpatterns = [
-    # Ye 3 URLs Frontend ke liye hain
-    path("students/count/", views.student_count, name="student-count"),
-    path("teachers/count/", views.teacher_count, name="teacher-count"),
-    path("fees/summary/", views.fee_summary, name="fee-summary"),
+    # Master route for all dashboard data
+    path('stats/', DashboardStatsAPIView.as_view(), name='dashboard-stats'),
 ]

@@ -1,542 +1,1572 @@
-﻿import React, { useState, useEffect, useRef, useCallback } from "react";
+﻿import React, { useState, useEffect } from "react";
 import SidebarModern from "../components/SidebarModern";
-import "./dashboard.css"; 
-import toast, { Toaster } from 'react-hot-toast'; 
-import api from "../api/axios"; 
-import Webcam from "react-webcam"; 
-import ReactPlayer from "react-player"; 
-import { Camera, Video, UserCheck, ShieldCheck, Sparkles, Brain, Save, CheckCircle, Loader, Zap, Copy, RefreshCw } from "lucide-react"; 
+// ✅ NEW ICONS ADDED (Camera, Play, Pause, AlertCircle, UploadCloud, Loader2)
+import { Clock, CheckCircle, FileText, UserCheck, Brain, Plus, Trash, Save, FileOutput, Eye, Edit2, X, Sparkles, Zap, ChevronLeft, ChevronRight, RefreshCw, Layers, Award, BarChart2, Target, CheckSquare, ShoppingCart, List, Camera, Play, Pause, AlertCircle, UploadCloud, Loader2 } from "lucide-react";
+import toast, { Toaster } from 'react-hot-toast';
+import api from "../api/axios";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 
 export default function Exams() {
-  const [exams, setExams] = useState([]);
-  
-  // Panel & UI States
-  const [activePanel, setActivePanel] = useState("none"); 
-  const [selectedExam, setSelectedExam] = useState(null);
-  const [selectedStudentForReport, setSelectedStudentForReport] = useState(null); 
-  const [isRefreshing, setIsRefreshing] = useState(false); // ✅ Refresh Animation State
+    const [activeTab, setActiveTab] = useState('setter');
+    const [loaded, setLoaded] = useState(false);
+    const [loadingData, setLoadingData] = useState(false);
 
-  // --- AI QUIZ GENERATOR STATES ---
-  const [aiTopic, setAiTopic] = useState("");
-  const [isAiGenerating, setIsAiGenerating] = useState(false);
-  const [aiQuestions, setAiQuestions] = useState(null);
+    // --- PAPER SETTER STATE ---
+    const [questions, setQuestions] = useState([]);
 
-  // --- FACIAL RECOGNITION & VIDEO STATES ---
-  const webcamRef = useRef(null);
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [faceVerified, setFaceVerified] = useState(false);
+    const [newQ, setNewQ] = useState({
+        text: "", q_type: "Descriptive", difficulty: "Medium", section: "A", level: "Level 1",
+        marks: 5, negative_marks: 0, unattempted_marks: 0,
+        option_a: "", option_b: "", option_c: "", option_d: "", option_e: "", option_f: "", option_g: "", option_h: "", correct_option: ""
+    });
 
-  // --- LIVE MONITORING STATES ---
-  const [timeLeft, setTimeLeft] = useState(5400); 
-  const [liveLogs, setLiveLogs] = useState([]);
-  const [studentStatus, setStudentStatus] = useState([
-      {id: 1, name: 'Rahul S.', status: 'online', msg: 'Writing...'},
-      {id: 2, name: 'Priya D.', status: 'warning', msg: 'Tab Switched ⚠️'},
-      {id: 3, name: 'Amit K.', status: 'offline', msg: 'Disconnected 🔴'},
-      {id: 4, name: 'Sneha R.', status: 'online', msg: 'Writing...'},
-      {id: 5, name: 'Vikram', status: 'online', msg: 'Writing...'},
-      {id: 6, name: 'Kunal V.', status: 'warning', msg: 'No Face ⚠️'},
-  ]);
+    const [editingId, setEditingId] = useState(null);
+    const [viewQ, setViewQ] = useState(null);
 
-  // --- MOCK DATA ---
-  const [studentMarks, setStudentMarks] = useState([
-    { id: 101, name: "Naveen Soni", roll: "101", marks: { Physics: 95, Chemistry: 88, Maths: 92, English: 85, CS: 98 }, attendance: "92%" },
-    { id: 102, name: "Kunal Verma", roll: "102", marks: { Physics: 78, Chemistry: 82, Maths: 75, English: 80, CS: 85 }, attendance: "88%" },
-    { id: 103, name: "Rahul Singh", roll: "103", marks: { Physics: 45, Chemistry: 50, Maths: 30, English: 60, CS: 55 }, attendance: "70%" },
-    { id: 104, name: "Priya Das", roll: "104", marks: { Physics: 88, Chemistry: 90, Maths: 95, English: 92, CS: 90 }, attendance: "95%" },
-  ]);
+    const [examMeta, setExamMeta] = useState({
+        examName: "", className: "", subClass: "", subject: "", subSubject: "",
+        unit: "", chapter: "", examineeBody: "", timeAllowed: "", maxMarks: "",
+        paperId: "", paperSetNumber: "", placeOfExam: "", examPassword: "",
+        validity: "", permission: "Management", teacherName: "",
+        modeOfExam: "Online", toolsAllowed: "None",
+        examType: "Actual Exam", paperType: "Both"
+    });
 
-  const [formData, setFormData] = useState({ 
-    title: "", subject: "Physics", date: "", time: "", duration: "", totalMarks: "100",
-    passingMarks: "33", batch: "Class 10-A", instructions: "" 
-  });
+    const [editMeta, setEditMeta] = useState({});
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [questionToDelete, setQuestionToDelete] = useState(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 5;
 
-  // ✅ 1. ADDED: Safe Sound Function (Fixes Red Error)
-  const playSound = () => {
-    const audio = new Audio("https://actions.google.com/sounds/v1/cartoon/pop.ogg");
-    audio.play().catch(e => console.error("Audio play failed:", e));
-  };
+    const API_ENDPOINT = "exams/questions/";
 
-  // ✅ 2. DATA FETCHING FUNCTION (Reusable)
-  const fetchExams = useCallback(async (showToast = false) => {
-    if(showToast) setIsRefreshing(true);
-    try {
-      const response = await api.get("exams/");
-      if (response.data && response.data.length > 0) {
-          setExams(response.data);
-          if(showToast) toast.success("Dashboard Updated!");
-      } else {
-          loadOriginalMockData();
-      }
-    } catch (error) { 
-        loadOriginalMockData(); 
-        if(showToast) toast.error("Offline Mode Active");
-    } finally {
-        if(showToast) setTimeout(() => setIsRefreshing(false), 1000);
-    }
-  }, []);
+    // --- EVALUATION STATE (🔥 FEATURE 2: 3-TEACHER EVALUATION UPDATE) ---
+    const [currentSubmission, setCurrentSubmission] = useState(null);
+    const [evaluations, setEvaluations] = useState({
+        // ✅ Default mock scores given to T1 and T2 to show Average calculation dynamically
+        teacher1: { score: 78, comments: "Good concepts.", status: "Done" },
+        teacher2: { score: 84, comments: "Detailed answers.", status: "Done" },
+        teacher3: { score: null, comments: "Pending Review", status: "Pending" }
+    });
+    const [aiScore, setAiScore] = useState(null);
+    const [finalAverage, setFinalAverage] = useState("Pending");
 
-  // Initial Load
-  useEffect(() => {
-    fetchExams(false);
-  }, [fetchExams]);
+    // --- OMR & RESULT STATE (🔥 FEATURE 3: OMR SCANNER STATE) ---
+    const [studentAnswers, setStudentAnswers] = useState({});
+    const [examResult, setExamResult] = useState(null);
+    const [detailedResults, setDetailedResults] = useState([]);
+    const [isScanningOMR, setIsScanningOMR] = useState(false);
 
-  const loadOriginalMockData = () => {
-    setExams([
-      { id: 1, title: "Mid-Term Physics", subject: "Physics", date: "2025-12-22", time: "10:00 AM", duration: "2 Hrs", status: "Live", candidates: 45, icon: "⚡" },
-      { id: 2, title: "Calculus II Final", subject: "Maths", date: "2025-12-22", time: "11:00 AM", duration: "3 Hrs", status: "Live", candidates: 30, icon: "📐" },
-      { id: 3, title: "Final Exams 2025", subject: "All Subjects", date: "2025-12-30", time: "09:00 AM", duration: "3 Hrs", status: "Upcoming", candidates: 120, icon: "🎓" },
+    // --- LIVE QUIZ STATE (🔥 FEATURE 1: KBC STYLE QUIZ) ---
+    const [quizGroups, setQuizGroups] = useState([
+        { id: 'G1', score: 0, bonus: 0 }, { id: 'G2', score: 0, bonus: 0 },
+        { id: 'G3', score: 0, bonus: 0 }, { id: 'G4', score: 0, bonus: 0 }, { id: 'G5', score: 0, bonus: 0 }
     ]);
-  };
+    const [activeGroup, setActiveGroup] = useState(null);
+    const [quizTimer, setQuizTimer] = useState(0);
+    const [isTimerRunning, setIsTimerRunning] = useState(false);
+    const [quizLight, setQuizLight] = useState('red');
 
-  // ✅ REAL-TIME PROCTORING LOGIC
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        toast.error("WARNING: Tab Switching Detected! ⚠️", { duration: 4000 });
-        setLiveLogs(prev => [`• ${new Date().toLocaleTimeString()} - YOU: Switched Tab (Recorded)`, ...prev]);
-      }
-    };
-    const handleOffline = () => {
-      toast.error("Network Lost! 🔴");
-      setLiveLogs(prev => [`• ${new Date().toLocaleTimeString()} - YOU: Went Offline`, ...prev]);
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("offline", handleOffline);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
+    // 🔥 NEW STATE: For CSV Bulk Upload
+    const [csvFile, setCsvFile] = useState(null);
+    const [csvExamType, setCsvExamType] = useState("Objective");
+    const [isUploading, setIsUploading] = useState(false);
 
-  // ✅ IDENTITY VERIFICATION LOGIC
-  const handleVerifyFace = useCallback(() => {
-    setIsVerifying(true);
-    setTimeout(() => {
-        const imageSrc = webcamRef.current.getScreenshot();
-        if(imageSrc) {
-            setFaceVerified(true);
-            setIsVerifying(false);
-            playSound(); // ✅ Sound Added
-            toast.success("Identity Verified Successfully! 🟢");
-            setLiveLogs(prev => [`• ${new Date().toLocaleTimeString()} - Identity Check Passed`, ...prev]);
+    useEffect(() => {
+        setLoaded(true);
+        if (activeTab === 'setter' || activeTab === 'omr') {
+            fetchQuestions();
+        } else if (activeTab === 'evaluation') {
+            fetchEvaluationData();
         }
-    }, 2000);
-  }, [webcamRef]);
+    }, [activeTab]);
 
-  // ✅ AI QUIZ GENERATOR LOGIC
-  const handleGenerateAIQuiz = async () => {
-    if(!aiTopic) return toast.error("Please enter a topic first!");
-    
-    setIsAiGenerating(true);
-    setAiQuestions(null);
+    // 🔥 FEATURE 1: LIVE QUIZ TIMER LOGIC
+    useEffect(() => {
+        let interval = null;
+        if (isTimerRunning && quizTimer > 0) {
+            setQuizLight('green');
+            interval = setInterval(() => setQuizTimer(t => t - 1), 1000);
+        } else if (quizTimer === 0 && isTimerRunning) {
+            setIsTimerRunning(false);
+            setQuizLight('yellow');
+            toast.error("Time's Up!", { icon: '⏰' });
+        }
+        return () => clearInterval(interval);
+    }, [isTimerRunning, quizTimer]);
 
-    try {
-        const response = await api.post("exams/generate-quiz/", { topic: aiTopic });
-        
-        if(response.data.status === 'success') {
-            setAiQuestions(response.data.questions);
-            playSound(); // ✅ Sound Added
-            toast.success("✨ AI Generated Fresh Questions!");
+    // 🔥 FEATURE 2: 3-TEACHER AVERAGE CALCULATOR LOGIC
+    useEffect(() => {
+        let total = 0;
+        let count = 0;
+        if (evaluations.teacher1.status === 'Done') { total += Number(evaluations.teacher1.score); count++; }
+        if (evaluations.teacher2.status === 'Done') { total += Number(evaluations.teacher2.score); count++; }
+        if (evaluations.teacher3.status === 'Done') { total += Number(evaluations.teacher3.score); count++; }
+
+        if (count === 3) {
+            setFinalAverage((total / 3).toFixed(2));
         } else {
-            toast.error("AI Brain Overloaded! Try again.");
+            setFinalAverage("Pending");
         }
-    } catch (error) {
-        toast.error("Server Issue. Using Offline Mode.");
-        setAiQuestions([
-            { id: 1, question: `Sample AI Question regarding ${aiTopic}?`, options: ["Option A", "Option B", "Option C", "Option D"], correct: "Option A" }
-        ]);
-    } finally {
-        setIsAiGenerating(false);
+    }, [evaluations]);
+
+
+    // --- ACTIONS ---
+    const fetchQuestions = async () => {
+        setLoadingData(true);
+        try {
+            const res = await api.get(API_ENDPOINT);
+            setQuestions(Array.isArray(res.data) ? res.data : []);
+        } catch (error) {
+            console.warn("Backend not connected. Using local dummy data.");
+            setQuestions([
+                {
+                    id: 1, text: "Explain Newton's Laws of Motion.", q_type: "Descriptive", difficulty: "Medium", level: "Level 2", section: "A", marks: 10, negative_marks: 0, unattempted_marks: 0,
+                    exam_meta: { className: "10th", subClass: "A", subject: "Science", subSubject: "Physics", unit: "01", chapter: "04", paperId: "PHY-101", examPassword: "123", validity: "2 Hrs", permission: "Management", modeOfExam: "Online", toolsAllowed: "AI ChatGPT", examType: "Mock Test", paperType: "Both" }
+                },
+                {
+                    id: 2, text: "Select the correct properties of a noble gas:", q_type: "MCQ", difficulty: "Hard", level: "Level 3", section: "A", marks: 4, negative_marks: 1, unattempted_marks: 0, option_a: "Reactive", option_b: "Odorless", option_c: "Colorless", option_d: "Flammable", option_e: "Stable", option_f: "Toxic", correct_option: "E",
+                    exam_meta: { className: "10th", subClass: "B", subject: "Science", subSubject: "Chemistry", unit: "02", chapter: "05", paperId: "CHE-201", examPassword: "abc", validity: "3 Hrs", permission: "Seekers", modeOfExam: "Offline", toolsAllowed: "None", examType: "Actual Exam", paperType: "Objective" }
+                }
+            ]);
+        } finally {
+            setLoadingData(false);
+        }
+    };
+
+    const handleSaveQuestion = async () => {
+        if (!newQ.text) return toast.error("Write a question first!");
+        const loadId = toast.loading("Saving...");
+
+        try {
+            let questionPayload;
+            if (editingId) {
+                questionPayload = { ...newQ, exam_meta: { ...editMeta } };
+                await api.put(`${API_ENDPOINT}${editingId}/`, questionPayload);
+                setQuestions(questions.map(q => q.id === editingId ? { ...questionPayload, id: editingId } : q));
+                toast.success("Question Updated Successfully!", { id: loadId });
+                setEditingId(null);
+                setShowEditModal(false);
+            } else {
+                questionPayload = { ...newQ, exam_meta: { ...examMeta } };
+                const res = await api.post(API_ENDPOINT, questionPayload);
+                const savedQ = res.data && res.data.id ? res.data : { ...questionPayload, id: Date.now() };
+                setQuestions([savedQ, ...questions]);
+                toast.success("Saved to Database!", { id: loadId });
+            }
+            setNewQ({ text: "", q_type: "Descriptive", difficulty: "Medium", section: "A", level: "Level 1", marks: 5, negative_marks: 0, unattempted_marks: 0, option_a: "", option_b: "", option_c: "", option_d: "", option_e: "", option_f: "", option_g: "", option_h: "", correct_option: "" });
+            setEditMeta({});
+        } catch (error) {
+            const fakeId = Date.now();
+            if (editingId) {
+                const questionPayload = { ...newQ, exam_meta: { ...editMeta } };
+                setQuestions(questions.map(q => q.id === editingId ? { ...questionPayload, id: editingId } : q));
+                setEditingId(null);
+                setShowEditModal(false);
+            } else {
+                const questionPayload = { ...newQ, exam_meta: { ...examMeta } };
+                setQuestions([{ ...questionPayload, id: fakeId }, ...questions]);
+            }
+            toast.success("Saved Locally (DB Offline)", { id: loadId });
+            setNewQ({ text: "", q_type: "Descriptive", difficulty: "Medium", section: "A", level: "Level 1", marks: 5, negative_marks: 0, unattempted_marks: 0, option_a: "", option_b: "", option_c: "", option_d: "", option_e: "", option_f: "", option_g: "", option_h: "", correct_option: "" });
+            setEditMeta({});
+        }
+    };
+
+    const initiateDelete = (q) => {
+        setQuestionToDelete(q);
+        setShowDeleteModal(true);
+    };
+
+    const confirmDelete = async () => {
+        if (!questionToDelete) return;
+        try {
+            await api.delete(`${API_ENDPOINT}${questionToDelete.id}/`);
+            setQuestions(questions.filter(q => q.id !== questionToDelete.id));
+            toast.success("Deleted from Database");
+        } catch (error) {
+            setQuestions(questions.filter(q => q.id !== questionToDelete.id));
+            toast.success("Deleted Locally");
+        }
+        setShowDeleteModal(false);
+        setQuestionToDelete(null);
+    };
+
+    const handleEditClick = (q) => {
+        setNewQ({
+            text: q.text, q_type: q.q_type, marks: q.marks, difficulty: q.difficulty || "Medium", section: q.section || "A", level: q.level || "Level 1",
+            negative_marks: q.negative_marks || 0, unattempted_marks: q.unattempted_marks || 0,
+            option_a: q.option_a || "", option_b: q.option_b || "", option_c: q.option_c || "", option_d: q.option_d || "",
+            option_e: q.option_e || "", option_f: q.option_f || "", option_g: q.option_g || "", option_h: q.option_h || "",
+            correct_option: q.correct_option || ""
+        });
+        setEditMeta(q.exam_meta || {});
+        setEditingId(q.id);
+        setShowEditModal(true);
+    };
+
+    const handleCancelEdit = () => {
+        setEditingId(null);
+        setNewQ({ text: "", q_type: "Descriptive", difficulty: "Medium", section: "A", level: "Level 1", marks: 5, negative_marks: 0, unattempted_marks: 0, option_a: "", option_b: "", option_c: "", option_d: "", option_e: "", option_f: "", option_g: "", option_h: "", correct_option: "" });
+        setEditMeta({});
+        setShowEditModal(false);
+    };
+
+    const generatePaper = () => {
+        if (!examMeta.examName) return toast.error("Please enter Exam Name first!");
+        try {
+            const doc = new jsPDF();
+            doc.setFontSize(18);
+            doc.text(examMeta.examName, 105, 15, null, null, "center");
+
+            doc.setFontSize(10);
+            const classStr = examMeta.subClass ? `${examMeta.className} (${examMeta.subClass})` : examMeta.className || "N/A";
+            const subStr = examMeta.subSubject ? `${examMeta.subject} - ${examMeta.subSubject}` : examMeta.subject || "N/A";
+
+            doc.text(`Class/Sec: ${classStr} | Subject: ${subStr} | Set By: ${examMeta.teacherName || "N/A"}`, 105, 23, null, null, "center");
+            doc.text(`Place: ${examMeta.placeOfExam || "N/A"} | Paper ID: ${examMeta.paperId || "N/A"} | Set: ${examMeta.paperSetNumber || "N/A"}`, 105, 29, null, null, "center");
+            doc.text(`Type: ${examMeta.examType} | Mode: ${examMeta.modeOfExam} | Max: ${examMeta.maxMarks}`, 105, 35, null, null, "center");
+
+            const tableRows = questions.map((q, i) => [
+                i + 1,
+                q.section || "A",
+                q.level || "Level 1",
+                q.q_type === 'MCQ' ? `${q.text}\nA) ${q.option_a} B) ${q.option_b} C) ${q.option_c} D) ${q.option_d}\nE) ${q.option_e} F) ${q.option_f} G) ${q.option_g} H) ${q.option_h}`.replace(/ [A-H]\) $/g, '') : q.text,
+                q.q_type,
+                q.difficulty || "Medium",
+                `+${q.marks} / -${q.negative_marks || 0}`
+            ]);
+
+            if (typeof doc.autoTable === 'function') {
+                doc.autoTable({ head: [["Q.No", "Sec", "Level", "Question", "Type", "Diff", "Marking"]], body: tableRows, startY: 40 });
+            } else {
+                doc.text("Table generation failed. Raw data below:", 10, 45);
+            }
+            doc.save(`${examMeta.examName}_${examMeta.className}_${examMeta.subject}_Paper.pdf`);
+            toast.success("Paper Set Generated! 💾");
+        } catch (error) { toast.error("Failed to generate PDF. Check console."); }
+    };
+
+    const indexOfLastItem = currentPage * itemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+    const currentQuestions = questions.slice(indexOfFirstItem, indexOfLastItem);
+    const totalPages = Math.ceil(questions.length / itemsPerPage);
+    const paginate = (pageNumber) => setCurrentPage(pageNumber);
+    const nextPage = () => setCurrentPage((prev) => (prev < totalPages ? prev + 1 : prev));
+    const prevPage = () => setCurrentPage((prev) => (prev > 1 ? prev - 1 : prev));
+
+    const fetchEvaluationData = async () => {
+        try {
+            setCurrentSubmission({ answer_text: "Newton's first law states that an object remains in a state of rest or of uniform motion in a straight line unless compelled to change that state by an applied force." });
+        } catch (error) { }
+    };
+
+    const handleAiCheck = async () => {
+        toast.loading("AI Scanning Answer Sheet...");
+        const answerToEvaluate = currentSubmission?.answer_text || "Newton's first law states that an object remains in a state of rest or of uniform motion in a straight line unless compelled to change that state by an applied force.";
+        try {
+            const res = await api.post('exams/ai-evaluate/', { answer: answerToEvaluate });
+            toast.dismiss();
+            if (res.data && res.data.score) {
+                setAiScore(res.data.score);
+                toast.success("AI Evaluation Complete!");
+                fetchEvaluationData();
+            }
+        } catch (error) {
+            toast.dismiss();
+            toast.success("AI Mock Mode: 88/100 Assessed");
+            setAiScore(88);
+        }
+    };
+
+    // 🔥 FEATURE 2 ACTION: Submit Teacher 3 Score
+    const submitTeacher3Score = () => {
+        setEvaluations({ ...evaluations, teacher3: { score: 85, comments: "Well written and explained properly.", status: "Done" } });
+        toast.success("Teacher 3 (T3) Score Submitted!");
     }
-  };
 
-  // ✅ SAVE TO QUESTION BANK LOGIC
-  const handleSaveToBank = async () => {
-    if(!aiQuestions || aiQuestions.length === 0) return toast.error("No questions to save!");
+    // 🔥 FEATURE 3 ACTION: OMR SCANNER SIMULATION
+    const simulateOMRScan = (e) => {
+        if (!e.target.files[0]) return;
+        setIsScanningOMR(true);
+        toast.loading("AI Scanning Physical OMR Sheet...", { id: "omr" });
 
-    const toastId = toast.loading("Saving to Database...");
+        setTimeout(() => {
+            const mockScannedAnswers = {};
+            questions.filter(q => q.q_type === 'MCQ').forEach(q => {
+                const activeOpts = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].filter(opt => q[`option_${opt.toLowerCase()}`]);
+                const fallbackOpts = activeOpts.length > 0 ? activeOpts : ['A', 'B', 'C', 'D'];
+                mockScannedAnswers[q.id] = fallbackOpts[Math.floor(Math.random() * fallbackOpts.length)];
+            });
+            setStudentAnswers(mockScannedAnswers);
+            setIsScanningOMR(false);
+            toast.success("OMR Scan Successful! Answers Auto-filled.", { id: "omr" });
+        }, 2500);
+    };
 
-    try {
-        const response = await api.post("exams/save-quiz/", { 
-            topic: aiTopic, 
-            questions: aiQuestions 
+    const handleOMRSelect = (qId, option) => {
+        setStudentAnswers({ ...studentAnswers, [qId]: option });
+    };
+
+    const submitOMR = async () => {
+        const loadId = toast.loading("Calculating & Saving Results to Database...");
+        let totalMaxMarks = 0;
+        let obtainedMarks = 0;
+        let correctCount = 0;
+        let incorrectCount = 0;
+        let unattemptedCount = 0;
+
+        let totalCorrectMarksAwarded = 0;
+        let totalIncorrectMarksDeducted = 0;
+        let totalUnattemptedMarksDeducted = 0;
+
+        let detailedLog = [];
+
+        const mcqQuestions = questions.filter(q => q.q_type === 'MCQ' || q.q_type === 'True/False');
+
+        mcqQuestions.forEach((q, idx) => {
+            totalMaxMarks += (q.marks || 0);
+            const studentAns = studentAnswers[q.id];
+
+            let logEntry = {
+                qNo: idx + 1,
+                mm: q.marks || 0,
+                section: q.section || "A",
+                correctOption: q.correct_option || "-",
+                attempted: studentAns ? studentAns : "Not Attempted",
+                status: "",
+                marksAwarded: 0
+            };
+
+            if (!studentAns) {
+                unattemptedCount++;
+                totalUnattemptedMarksDeducted += (q.unattempted_marks || 0);
+                obtainedMarks -= (q.unattempted_marks || 0);
+                logEntry.status = "Unattempted";
+                logEntry.marksAwarded = -(q.unattempted_marks || 0);
+            } else if (studentAns === q.correct_option) {
+                correctCount++;
+                totalCorrectMarksAwarded += (q.marks || 0);
+                obtainedMarks += (q.marks || 0);
+                logEntry.status = "Correct";
+                logEntry.marksAwarded = (q.marks || 0);
+            } else {
+                incorrectCount++;
+                totalIncorrectMarksDeducted += (q.negative_marks || 0);
+                obtainedMarks -= (q.negative_marks || 0);
+                logEntry.status = "Incorrect";
+                logEntry.marksAwarded = -(q.negative_marks || 0);
+            }
+            detailedLog.push(logEntry);
         });
 
-        if(response.data.status === 'success') {
-            playSound(); // ✅ Sound Added
-            toast.success("Quiz Saved to Exam Bank! 🎉", { id: toastId });
-            setActivePanel("none"); 
-            fetchExams(true); 
-        } else {
-            toast.error("Failed to Save.", { id: toastId });
+        const percentage = totalMaxMarks > 0 ? (obtainedMarks / totalMaxMarks) * 100 : 0;
+        let grade = "F";
+        if (percentage >= 90) grade = "A+";
+        else if (percentage >= 80) grade = "A";
+        else if (percentage >= 70) grade = "B+";
+        else if (percentage >= 60) grade = "B";
+        else if (percentage >= 50) grade = "C";
+        else if (percentage >= 40) grade = "D";
+
+        try {
+            await api.post("exams/submit/1/", {
+                answers: studentAnswers,
+                final_score: obtainedMarks,
+                percentage: percentage,
+                negative_marks_deducted: totalIncorrectMarksDeducted // 🔥 NEW: Backend OMR tracker ke liye
+            });
+            toast.success("Result Saved to Database Successfully!", { id: loadId });
+        } catch (error) {
+            console.warn("Backend not ready or offline. Saving Locally.");
+            toast.success("Result Generated (Local Mode)", { id: loadId });
         }
-    } catch (error) {
-        console.error(error);
-        toast.error("Server Error! Check Backend.", { id: toastId });
-    }
-  };
 
-  // Timer Logic
-  useEffect(() => {
-    let timer;
-    if (activePanel === 'monitor' && timeLeft > 0) {
-      timer = setInterval(() => setTimeLeft((p) => p - 1), 1000);
-    }
-    return () => clearInterval(timer);
-  }, [activePanel, timeLeft]);
+        setTimeout(() => {
+            setExamResult({
+                totalQuestions: mcqQuestions.length,
+                totalMaxMarks, obtainedMarks, correctCount, incorrectCount, unattemptedCount,
+                totalCorrectMarksAwarded, totalIncorrectMarksDeducted, totalUnattemptedMarksDeducted,
+                percentage: percentage.toFixed(2), grade
+            });
+            setDetailedResults(detailedLog);
+        }, 500);
+    };
 
-  // Logs Simulator
-  useEffect(() => {
-    let poller;
-    if (activePanel === 'monitor') {
-      poller = setInterval(() => {
-        const events = ['Tab Switched ⚠️', 'Lost Connection 🔴', 'Back Online 🟢'];
-        const randomEvent = events[Math.floor(Math.random() * events.length)];
-        const newLog = `• ${new Date().toLocaleTimeString()} - Student Alert : ${randomEvent}`;
-        setLiveLogs(prev => [newLog, ...prev]);
-      }, 4000);
-    }
-    return () => clearInterval(poller);
-  }, [activePanel]);
+    // 🔥 FEATURE 1 ACTIONS: LIVE QUIZ LOGIC
+    const startQuizRound = (time) => {
+        if (!activeGroup) return toast.error("Select a group first!");
+        setQuizTimer(time);
+        setIsTimerRunning(true);
+        setQuizLight('green');
+    };
 
-  const formatTime = (seconds) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
+    const stopQuizRound = () => {
+        setIsTimerRunning(false);
+        setQuizLight('red');
+    };
 
-  const handleNotifyParents = async (examId) => {
-    try {
-      toast.loading("Sending SMS alerts...");
-      await api.post(`exams/notify/`, { exam_id: examId }); 
-      toast.dismiss();
-      playSound(); // ✅ Sound Added
-      toast.success("SMS Sent to all Parents! 📱");
-    } catch (error) {
-      toast.dismiss();
-      playSound(); // ✅ Sound Added
-      toast.success("DEBUG: SMS Signal Triggered ✅");
-    }
-  };
+    const awardQuizMarks = (type) => {
+        if (!activeGroup) return;
+        const updatedGroups = quizGroups.map(g => {
+            if (g.id === activeGroup) {
+                return { ...g, score: type === 'main' ? g.score + 10 : g.score, bonus: type === 'bonus' ? g.bonus + 5 : g.bonus };
+            }
+            return g;
+        });
+        setQuizGroups(updatedGroups);
+        toast.success(`Marks Awarded to ${activeGroup}`);
+        setQuizLight('red');
+        setIsTimerRunning(false);
+        setQuizTimer(0);
+    };
 
-  const handlePauseExam = async () => { toast.success("Exam Paused for all Candidates ⏸"); };
-  const handleMessageAll = () => { toast.success("Message Broadcasted 📩"); };
+    // 🔥 NEW FEATURE 4: CSV UPLOAD HANDLERS
+    const handleCsvFileChange = (e) => {
+        const selectedFile = e.target.files[0];
+        if (selectedFile && selectedFile.name.endsWith('.csv')) {
+            setCsvFile(selectedFile);
+        } else {
+            toast.error("Please upload a valid .csv file.");
+        }
+    };
 
-  const calculateGrade = (marks) => {
-    if (marks >= 90) return "A+"; if (marks >= 80) return "A";
-    if (marks >= 70) return "B+"; if (marks >= 60) return "B";
-    if (marks >= 50) return "C"; if (marks >= 33) return "D";
-    return "F";
-  };
+    const handleCsvUpload = async () => {
+        if (!csvFile) return toast.error("Please select a CSV file first.");
+        const toastId = toast.loading("Uploading CSV data...");
+        setIsUploading(true);
 
-  const handleOpenSchedule = () => {
-    setFormData({ title: "", subject: "Physics", date: "", time: "", duration: "", totalMarks: "100", passingMarks: "33", batch: "Class 10-A", instructions: "" });
-    setActivePanel("schedule"); 
-  };
+        const formData = new FormData();
+        formData.append("file", csvFile);
+        formData.append("exam_type", csvExamType);
 
-  const handleMonitor = (exam) => { setSelectedExam(exam); setActivePanel("monitor"); };
-  const handleResults = (exam) => { setSelectedExam(exam); setActivePanel("results"); };
-  const handleGenerateReportCard = (student) => { setSelectedStudentForReport(student); setActivePanel("reportCard"); };
-  const handlePrint = () => { window.print(); };
+        try {
+            const token = sessionStorage.getItem("access_token") || localStorage.getItem("access_token");
+            await api.post("/exams/upload-csv/", formData, {
+                headers: { "Content-Type": "multipart/form-data", Authorization: `Bearer ${token}` }
+            });
+            toast.success("Exam data uploaded successfully! 🎉", { id: toastId });
+            setCsvFile(null);
+            fetchQuestions(); // Refresh records
+            setActiveTab('setter'); // Go back to table
+        } catch (error) {
+            toast.error(error.response?.data?.error || "Upload failed. Check CSV format.", { id: toastId });
+        } finally {
+            setIsUploading(false);
+        }
+    };
 
-  const handleSaveSchedule = async () => {
-      if(!formData.title) return toast.error("Enter Exam Title");
-      playSound(); // ✅ Sound Added
-      toast.success("Exam Published! 🚀");
-      setActivePanel("none");
-      fetchExams(true); 
-  };
+    return (
+        <div className="exams-page-wrapper">
+            <SidebarModern />
+            <div className="exams-main-content">
+                <Toaster position="top-center" />
 
-  const getStatusBadge = (status) => {
-    switch(status) {
-        case 'Live': return { bg: '#fef2f2', color: '#dc2626', border: '#fca5a5', label: '● LIVE NOW', specialClass: 'pulse-red' }; 
-        case 'Upcoming': return { bg: '#eff6ff', color: '#3b82f6', border: '#bfdbfe', label: 'Upcoming', specialClass: 'shimmer-hover' }; 
-        default: return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', label: 'Completed' };
-    }
-  };
-
-  const inputStyle = {
-    width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #cbd5e1', background: '#ffffff', color: '#000000', outline: 'none', fontSize: '0.9rem', fontWeight: '600', transition: '0.3s'
-  };
-
-  return (
-    <div className="dashboard-container" style={{background: '#f8fafc', height: '100vh', display: 'flex', overflow: 'hidden'}}>
-      <SidebarModern />
-      <Toaster position="top-center" />
-
-      <div className="main-content" style={{flex: 1, padding: '30px 40px', overflowY: 'auto', position: 'relative', display: 'flex', flexDirection: 'column'}}>
-        
-        <header className="slide-in-down" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '35px', flexShrink: 0 }}>
-          <div>
-            <h1 className="gradient-text" style={{ fontSize: '2.5rem', fontWeight: '800', color: '#1e293b', letterSpacing: '-1px', margin: 0 }}>Examination & Results</h1>
-            <p style={{ color: '#64748b', fontSize: '1rem', fontWeight: '600', margin: 0 }}>Smart LMS Proctoring & Automated Learning.</p>
-          </div>
-          <div style={{display: 'flex', gap: '12px'}}>
-            
-            {/* ✅ REFRESH BUTTON */}
-            <button 
-                onClick={() => fetchExams(true)} 
-                className={`btn-icon-only ${isRefreshing ? 'spin-fast' : ''}`} 
-                style={{background: 'white', border: '1px solid #e2e8f0', borderRadius: '50%', width: '45px', height: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.05)'}}
-                title="Refresh Data"
-            >
-                <RefreshCw size={20} color="#64748b"/>
-            </button>
-
-            <button className="btn-glow hover-scale-press" onClick={() => setActivePanel("aiGenerator")} style={{background: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 15px rgba(236, 72, 153, 0.4)'}}>
-                <Sparkles size={18}/> AI Quiz Gen
-            </button>
-            <button className="btn-glow hover-scale-press" onClick={() => setActivePanel("lectures")} style={{background: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px'}}>
-                <Video size={18}/> Lectures
-            </button>
-            <button className="btn-glow pulse-animation hover-scale-press" onClick={handleOpenSchedule} style={{fontWeight: '700', padding: '12px 25px'}}>
-              <span style={{marginRight: '8px', fontSize: '1.2rem'}}>+</span> Schedule Exam
-            </button>
-          </div>
-        </header>
-
-        {/* Stats Grid */}
-        <div className="stats-grid" style={{display: 'flex', gap: '20px', marginBottom: '30px', flexShrink: 0}}>
-            <div className="stat-card-glass fade-in-up" style={{animationDelay: '0.1s'}}>
-                <div style={{display:'flex', justifyContent:'space-between', alignItems: 'center'}}>
-                    <div><span style={{color:'#64748b', fontWeight:'700', fontSize:'0.85rem'}}>LIVE EXAMS</span><h2 style={{color:'#ef4444', fontSize:'2.2rem', margin: '5px 0'}}>02</h2></div>
-                    <div className="icon-box" style={{background: '#fef2f2', color: '#ef4444'}}>📡</div>
-                </div>
-            </div>
-            <div className="stat-card-glass fade-in-up" style={{animationDelay: '0.2s'}}>
-                <div style={{display:'flex', justifyContent:'space-between', alignItems: 'center'}}>
-                    <div><span style={{color:'#64748b', fontWeight:'700', fontSize:'0.85rem'}}>UPCOMING</span><h2 style={{color:'#3b82f6', fontSize:'2.2rem', margin: '5px 0'}}>05</h2></div>
-                    <div className="icon-box" style={{background: '#eff6ff', color: '#3b82f6'}}>📅</div>
-                </div>
-            </div>
-            <div className="stat-card-glass fade-in-up" style={{animationDelay: '0.3s'}}>
-                <div style={{display:'flex', justifyContent:'space-between', alignItems: 'center'}}>
-                    <div><span style={{color:'#64748b', fontWeight:'700', fontSize:'0.85rem'}}>RESULTS DECLARED</span><h2 style={{color:'#10b981', fontSize:'2.2rem', margin: '5px 0'}}>19</h2></div>
-                    <div className="icon-box" style={{background: '#f0fdf4', color: '#10b981'}}>✅</div>
-                </div>
-            </div>
-        </div>
-
-        <div className="glass-card fade-in-up" style={{ flex: 1, background: 'white', padding: '30px', borderRadius: '28px', animationDelay: '0.4s', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div className="table-container-scroll" style={{overflowY: 'auto', paddingRight: '5px'}}>
-                <table className="modern-table luxe-table">
-                    <thead><tr><th style={{width: '25%'}}>EXAM TITLE</th><th style={{width: '15%'}}>DATE</th><th style={{width: '15%'}}>DURATION</th><th style={{width: '15%'}}>CANDIDATES</th><th style={{width: '15%'}}>STATUS</th><th style={{width: '15%', textAlign: 'right'}}>ACTION</th></tr></thead>
-                    <tbody>
-                        {exams.map((exam, idx) => {
-                            const statusStyle = getStatusBadge(exam.status);
-                            return (
-                                <tr key={exam.id} className="floating-row stagger-animation" style={{animationDelay: `${idx * 0.08}s`}}>
-                                    <td><div style={{display:'flex', alignItems:'center', gap:'15px'}}><div className="subject-icon-box">{exam.icon}</div><div style={{display:'flex', flexDirection:'column'}}><b style={{color: '#1e293b', fontSize: '0.95rem'}}>{exam.title}</b><span style={{color: '#64748b', fontSize: '0.8rem'}}>{exam.subject}</span></div></div></td>
-                                    <td><span style={{color:'#334155', fontWeight:'600'}}>{exam.date}</span><br/><span style={{fontSize:'0.8rem', color:'#64748b'}}>{exam.time}</span></td>
-                                    <td style={{color: '#64748b', fontWeight: '500'}}>⏱ {exam.duration}</td>
-                                    <td><span style={{fontWeight:'700', color:'#334155'}}>👥 {exam.candidates}</span></td>
-                                    <td><span className={`status-badge ${statusStyle.specialClass}`} style={{ background: statusStyle.bg, color: statusStyle.color, border: `1px solid ${statusStyle.border}` }}>{statusStyle.label || exam.status}</span></td>
-                                    <td style={{textAlign: 'right'}}>
-                                        {exam.status === 'Upcoming' && <button className="btn-secondary-sm hover-lift" onClick={() => handleNotifyParents(exam.id)} style={{marginRight: '8px', color: '#6366f1', borderColor: '#6366f1'}}>Notify 🔔</button>}
-                                        {exam.status === 'Live' ? <button className="btn-monitor hover-lift" onClick={() => handleMonitor(exam)}>Monitor 👁</button> : <button className="btn-results hover-lift" onClick={() => handleResults(exam)}>Report Cards 📄</button>}
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        {activePanel !== "none" && (
-            <div className="overlay-blur" onClick={() => setActivePanel("none")}>
-                <div className={`luxe-panel slide-in-right ${['reportCard', 'lectures', 'aiGenerator'].includes(activePanel) ? 'report-panel' : ''}`} onClick={(e) => e.stopPropagation()}>
-                    <div className="panel-header-simple no-print" style={{borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px'}}>
-                        <div>
-                            <h2 style={{margin: '0 0 5px', color: '#0f172a', fontWeight:'800'}}>
-                                {activePanel === 'schedule' ? 'Schedule Exam' : activePanel === 'monitor' ? 'AI Cockpit' : activePanel === 'lectures' ? 'Interactive Video' : activePanel === 'aiGenerator' ? 'AI Quiz Architect' : 'Student Report Card'}
-                            </h2>
-                            <p style={{margin: 0, color: '#64748b', fontSize: '0.9rem'}}>
-                                {activePanel === 'aiGenerator' ? 'Generate high-quality MCQs instantly.' : 'Manage system operations.'}
-                            </p>
-                        </div>
-                        <button className="close-circle-btn hover-rotate" onClick={() => setActivePanel("none")}>✕</button>
+                <header className={`page-header ${loaded ? 'slide-in-top' : ''}`}>
+                    <div className="header-titles">
+                        <h1 className="page-title">Exam Controller <Sparkles size={24} className="sparkle-icon" color="#3b82f6" /></h1>
+                        <p className="page-subtitle">Connected to Live Database ⚡</p>
                     </div>
-                    
-                    <div className="panel-content-scroll">
-                        
-                        {/* ✅ PREMIUM AI QUIZ GENERATOR UI */}
-                        {activePanel === 'aiGenerator' && (
-                            <div style={{display: 'flex', flexDirection: 'column', gap: '25px'}}>
-                                <div className="ai-hero-card">
-                                    <div style={{position: 'absolute', top: '-10px', right: '-10px', opacity: 0.1}}><Brain size={120} color="white"/></div>
-                                    <div style={{display:'flex', alignItems:'center', gap:'12px', marginBottom:'15px', position:'relative'}}>
-                                        <div className="glass-icon"><Zap size={22} color="white"/></div>
-                                        <h3 style={{margin:0, color:'white', fontSize:'1.2rem', textShadow: '0 2px 4px rgba(0,0,0,0.1)'}}>What should we test today?</h3>
-                                    </div>
-                                    <div style={{background: 'rgba(255,255,255,0.2)', borderRadius: '16px', padding: '5px', backdropFilter: 'blur(5px)', border: '1px solid rgba(255,255,255,0.3)'}}>
-                                        <textarea 
-                                            placeholder="e.g. Thermodynamics, Shakespeare's Macbeth, Python List Comprehension..." 
-                                            value={aiTopic}
-                                            onChange={(e) => setAiTopic(e.target.value)}
-                                            className="ai-textarea"
-                                        />
-                                    </div>
-                                    <button 
-                                        onClick={handleGenerateAIQuiz} 
-                                        disabled={isAiGenerating}
-                                        className="btn-ai-generate hover-scale-press"
-                                    >
-                                        {isAiGenerating ? <><Loader className="spin-slow" size={20}/> Orchestrating Questions...</> : <><Sparkles size={20}/> Generate Magic Quiz</>}
-                                    </button>
+                    <div className="tab-switch">
+                        <button onClick={() => setActiveTab('setter')} className={`tab-btn ${activeTab === 'setter' ? 'active' : ''}`} style={{ border: 'none', background: activeTab === 'setter' ? '#eff6ff' : 'transparent', color: activeTab === 'setter' ? '#3b82f6' : '#64748b', padding: '10px 20px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Plus size={18} /> Paper Setter
+                        </button>
+                        {/* 🔥 NEW TAB FOR BULK CSV UPLOAD */}
+                        <button onClick={() => setActiveTab('upload')} className={`tab-btn ${activeTab === 'upload' ? 'active' : ''}`} style={{ border: 'none', background: activeTab === 'upload' ? '#eff6ff' : 'transparent', color: activeTab === 'upload' ? '#3b82f6' : '#64748b', padding: '10px 20px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <UploadCloud size={18} /> Bulk CSV Upload
+                        </button>
+                        <button onClick={() => setActiveTab('omr')} className={`tab-btn ${activeTab === 'omr' ? 'active' : ''}`} style={{ border: 'none', background: activeTab === 'omr' ? '#eff6ff' : 'transparent', color: activeTab === 'omr' ? '#3b82f6' : '#64748b', padding: '10px 20px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Target size={18} /> Live OMR Exam
+                        </button>
+                        <button onClick={() => setActiveTab('evaluation')} className={`tab-btn ${activeTab === 'evaluation' ? 'active' : ''}`} style={{ border: 'none', background: activeTab === 'evaluation' ? '#eff6ff' : 'transparent', color: activeTab === 'evaluation' ? '#3b82f6' : '#64748b', padding: '10px 20px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <CheckCircle size={18} /> Evaluation
+                        </button>
+                        {/* ✅ NEW TAB FOR LIVE QUIZ */}
+                        <button onClick={() => setActiveTab('quiz')} className={`tab-btn ${activeTab === 'quiz' ? 'active' : ''}`} style={{ border: 'none', background: activeTab === 'quiz' ? '#eff6ff' : 'transparent', color: activeTab === 'quiz' ? '#3b82f6' : '#64748b', padding: '10px 20px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <AlertCircle size={18} /> Live Quiz (KBC)
+                        </button>
+                    </div>
+                </header>
+
+                {activeTab === 'setter' && (
+                    <div className="content-wrapper">
+
+                        {/* ✅ GLOBAL EXAM META DATA */}
+                        <div className="card shadow-md stagger-1 mb-20">
+                            <div className="card-header">
+                                <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Layers size={18} color="#3b82f6" /> Exam Configuration</h3>
+                            </div>
+                            <div className="card-body form-grid">
+                                <div className="input-group"><input type="text" placeholder="Name of Exam (e.g. Final)" className="input-field" value={examMeta.examName} onChange={e => setExamMeta({ ...examMeta, examName: e.target.value })} /></div>
+
+                                <div className="input-group">
+                                    <select className="input-field" value={examMeta.examType} onChange={e => setExamMeta({ ...examMeta, examType: e.target.value })}>
+                                        <option value="Mock Test">Mock Test</option><option value="Actual Exam">Actual Exam</option><option value="Practice">Practice</option><option value="Both">Both</option>
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <select className="input-field" value={examMeta.paperType} onChange={e => setExamMeta({ ...examMeta, paperType: e.target.value })}>
+                                        <option value="Objective">Objective</option><option value="Descriptive">Descriptive</option><option value="Both">Both</option><option value="None">None</option>
+                                    </select>
                                 </div>
 
-                                {aiQuestions && (
-                                    <div className="fade-in-up">
-                                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '15px'}}>
-                                            <h4 style={{color:'#334155', margin:0, display:'flex', alignItems:'center', gap:'8px'}}><CheckCircle size={18} color="#16a34a"/> AI Output Ready</h4>
-                                            <button className="btn-secondary-sm" style={{fontSize: '0.75rem', padding: '6px 12px'}}><Copy size={14}/> Copy All</button>
-                                        </div>
-                                        {aiQuestions.map((q, i) => (
-                                            <div key={q.id} className="ai-question-card">
-                                                <div style={{marginBottom:'12px'}}>
-                                                    <span style={{fontSize:'0.75rem', fontWeight:'800', color:'#8b5cf6', background:'#f3e8ff', padding:'4px 8px', borderRadius:'6px', marginRight:'8px'}}>Q{i+1}</span>
-                                                    <b style={{color:'#1e293b', fontSize: '0.95rem'}}>{q.question}</b>
-                                                </div>
-                                                <div style={{display:'grid', gridTemplateColumns:'1fr', gap:'8px'}}>
-                                                    {q.options.map((opt) => (
-                                                        <div key={opt} className={`ai-option ${opt === q.correct ? 'correct' : ''}`}>
-                                                            {opt === q.correct ? <CheckCircle size={16} color="#16a34a"/> : <div style={{width:'16px'}}></div>} 
-                                                            {opt}
-                                                        </div>
+                                <div className="input-group"><input type="text" placeholder="Class (e.g. 10th)" className="input-field" value={examMeta.className} onChange={e => setExamMeta({ ...examMeta, className: e.target.value })} /></div>
+                                <div className="input-group"><input type="text" placeholder="Sub-Class/Section (e.g. A, B)" className="input-field" value={examMeta.subClass} onChange={e => setExamMeta({ ...examMeta, subClass: e.target.value })} /></div>
+                                <div className="input-group"><input type="text" placeholder="Subject (e.g. Science)" className="input-field" value={examMeta.subject} onChange={e => setExamMeta({ ...examMeta, subject: e.target.value })} /></div>
+                                <div className="input-group"><input type="text" placeholder="Sub-Subject (e.g. Physics)" className="input-field" value={examMeta.subSubject} onChange={e => setExamMeta({ ...examMeta, subSubject: e.target.value })} /></div>
+
+                                <div className="input-group"><input type="text" placeholder="Unit (e.g. 01)" className="input-field" value={examMeta.unit} onChange={e => setExamMeta({ ...examMeta, unit: e.target.value })} /></div>
+                                <div className="input-group"><input type="text" placeholder="Chapter (e.g. 05)" className="input-field" value={examMeta.chapter} onChange={e => setExamMeta({ ...examMeta, chapter: e.target.value })} /></div>
+                                <div className="input-group"><input type="text" placeholder="Paper ID" className="input-field" value={examMeta.paperId} onChange={e => setExamMeta({ ...examMeta, paperId: e.target.value })} /></div>
+                                <div className="input-group"><input type="password" placeholder="Exam Password" className="input-field" value={examMeta.examPassword} onChange={e => setExamMeta({ ...examMeta, examPassword: e.target.value })} /></div>
+                                <div className="input-group"><input type="text" placeholder="Validity" className="input-field" value={examMeta.validity} onChange={e => setExamMeta({ ...examMeta, validity: e.target.value })} /></div>
+
+                                <div className="input-group">
+                                    <select className="input-field" value={examMeta.permission} onChange={e => setExamMeta({ ...examMeta, permission: e.target.value })}>
+                                        <option value="Management">Management</option><option value="Provider">Provider</option><option value="Seekers">Seekers</option><option value="Guest">Guest</option><option value="Permanent">Permanent</option><option value="Adhoc">Adhoc</option><option value="Daily Wagers">Daily Wagers</option><option value="Others">Others</option>
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <select className="input-field" value={examMeta.modeOfExam} onChange={e => setExamMeta({ ...examMeta, modeOfExam: e.target.value })}>
+                                        <option value="Online">Online</option><option value="Offline">Offline</option><option value="Both">Both</option><option value="None">None</option>
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <select className="input-field" value={examMeta.toolsAllowed} onChange={e => setExamMeta({ ...examMeta, toolsAllowed: e.target.value })}>
+                                        <option value="None">None (No Tools)</option><option value="AI ChatGPT">AI ChatGPT Allowed</option><option value="Live Class">Live Class</option><option value="Recorded Video">Recorded Video</option><option value="Digitalised Board">Digitalised Board</option>
+                                    </select>
+                                </div>
+
+                                <div className="input-group"><input type="text" placeholder="Examinee Body (e.g. CBSE)" className="input-field" value={examMeta.examineeBody} onChange={e => setExamMeta({ ...examMeta, examineeBody: e.target.value })} /></div>
+                                <div className="input-group"><input type="text" placeholder="Place of Exam" className="input-field" value={examMeta.placeOfExam} onChange={e => setExamMeta({ ...examMeta, placeOfExam: e.target.value })} /></div>
+                                <div className="input-group"><input type="text" placeholder="Paper Set Number (e.g. A, B)" className="input-field" value={examMeta.paperSetNumber} onChange={e => setExamMeta({ ...examMeta, paperSetNumber: e.target.value })} /></div>
+                                <div className="input-group"><input type="text" placeholder="Time Allowed (e.g. 3 Hrs)" className="input-field" value={examMeta.timeAllowed} onChange={e => setExamMeta({ ...examMeta, timeAllowed: e.target.value })} /></div>
+                                <div className="input-group"><input type="number" placeholder="Total Max Marks" className="input-field" value={examMeta.maxMarks} onChange={e => setExamMeta({ ...examMeta, maxMarks: e.target.value })} /></div>
+                                <div className="input-group"><input type="text" placeholder="Paper Setter / Teacher Name" className="input-field" value={examMeta.teacherName} onChange={e => setExamMeta({ ...examMeta, teacherName: e.target.value })} /></div>
+                            </div>
+                        </div>
+
+                        {/* QUESTION FORM */}
+                        <div className="card shadow-md stagger-1">
+                            <div className="card-header">
+                                <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><FileText size={18} color="#f59e0b" /> Add New Question</h3>
+                            </div>
+                            <div className="card-body form-grid">
+                                <div className="input-group full-width-grid">
+                                    <input type="text" placeholder="Enter Question Text..." className="input-field" value={newQ.text} onChange={(e) => setNewQ({ ...newQ, text: e.target.value })} />
+                                    <span className="focus-border"></span>
+                                </div>
+
+                                <select className="input-field hover-glow" value={newQ.q_type} onChange={(e) => setNewQ({ ...newQ, q_type: e.target.value })}>
+                                    <option value="Descriptive">Descriptive</option>
+                                    <option value="MCQ">MCQ</option>
+                                    <option value="True/False">True/False</option>
+                                    <option value="Both">Both</option>
+                                    <option value="None">None</option>
+                                </select>
+
+                                <select className="input-field hover-glow" value={newQ.difficulty} onChange={(e) => setNewQ({ ...newQ, difficulty: e.target.value })}>
+                                    <option value="Easy">Easy Level</option>
+                                    <option value="Medium">Medium Level</option>
+                                    <option value="Hard">Hard Level</option>
+                                </select>
+
+                                <input type="text" placeholder="Section (e.g. A, B)" className="input-field hover-glow" value={newQ.section} onChange={(e) => setNewQ({ ...newQ, section: e.target.value })} />
+
+                                <select className="input-field hover-glow" value={newQ.level} onChange={(e) => setNewQ({ ...newQ, level: e.target.value })}>
+                                    <option value="Level 1">Level 1</option><option value="Level 2">Level 2</option><option value="Level 3">Level 3</option><option value="Level 4">Level 4</option>
+                                </select>
+
+                                <input type="number" placeholder="+ Marks (Correct)" className="input-field hover-glow" value={newQ.marks} onChange={(e) => setNewQ({ ...newQ, marks: parseFloat(e.target.value) || 0 })} />
+                                <input type="number" placeholder="- Marks (Incorrect)" className="input-field hover-glow" value={newQ.negative_marks} onChange={(e) => setNewQ({ ...newQ, negative_marks: parseFloat(e.target.value) || 0 })} />
+                                <input type="number" placeholder="0 Marks (Not Attempt)" className="input-field hover-glow" value={newQ.unattempted_marks} onChange={(e) => setNewQ({ ...newQ, unattempted_marks: parseFloat(e.target.value) || 0 })} />
+
+                                {newQ.q_type === 'MCQ' && (
+                                    <div className="mcq-options-row full-width-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+                                        <input type="text" placeholder="Option A" className="input-field" value={newQ.option_a} onChange={(e) => setNewQ({ ...newQ, option_a: e.target.value })} />
+                                        <input type="text" placeholder="Option B" className="input-field" value={newQ.option_b} onChange={(e) => setNewQ({ ...newQ, option_b: e.target.value })} />
+                                        <input type="text" placeholder="Option C" className="input-field" value={newQ.option_c} onChange={(e) => setNewQ({ ...newQ, option_c: e.target.value })} />
+                                        <input type="text" placeholder="Option D" className="input-field" value={newQ.option_d} onChange={(e) => setNewQ({ ...newQ, option_d: e.target.value })} />
+                                        <input type="text" placeholder="Option E" className="input-field" value={newQ.option_e} onChange={(e) => setNewQ({ ...newQ, option_e: e.target.value })} />
+                                        <input type="text" placeholder="Option F" className="input-field" value={newQ.option_f} onChange={(e) => setNewQ({ ...newQ, option_f: e.target.value })} />
+                                        <input type="text" placeholder="Option G" className="input-field" value={newQ.option_g} onChange={(e) => setNewQ({ ...newQ, option_g: e.target.value })} />
+                                        <input type="text" placeholder="Option H" className="input-field" value={newQ.option_h} onChange={(e) => setNewQ({ ...newQ, option_h: e.target.value })} />
+
+                                        <select className="input-field option-correct-select" style={{ gridColumn: 'span 4' }} value={newQ.correct_option} onChange={(e) => setNewQ({ ...newQ, correct_option: e.target.value })}>
+                                            <option value="">Select Correct Ans?</option>
+                                            <option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option>
+                                            <option value="E">E</option><option value="F">F</option><option value="G">G</option><option value="H">H</option>
+                                        </select>
+                                    </div>
+                                )}
+
+                                <div className="btn-group full-width-grid" style={{ marginTop: '10px' }}>
+                                    <button onClick={handleSaveQuestion} className="btn-primary ripple-effect save-db-btn">Save to DB</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* TABLE CARD */}
+                        <div className="card shadow-md stagger-2" style={{ marginTop: '20px' }}>
+                            <div className="card-header table-card-header">
+                                <h3>Database Records ({questions.length})</h3>
+                                <div className="table-header-actions">
+                                    <button onClick={fetchQuestions} className="icon-btn btn-view" title="Refresh Data"><RefreshCw size={16} /></button>
+                                    <button onClick={generatePaper} className="btn-success ripple-effect"><FileOutput size={18} /> Generate Paper PDF</button>
+                                </div>
+                            </div>
+
+                            <div className="card-body table-wrapper">
+                                {loadingData ? (
+                                    <div style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>Loading Data from Server...</div>
+                                ) : (
+                                    <>
+                                        <table className="modern-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Q. No</th>
+                                                    <th>Section</th>
+                                                    <th>Level</th>
+                                                    <th>Question</th>
+                                                    <th>Class (Sec)</th>
+                                                    <th>Subject (Sub)</th>
+                                                    <th>Unit</th>
+                                                    <th>Chapter</th>
+                                                    <th>Type</th>
+                                                    <th>Diff</th>
+                                                    <th>Marks</th>
+                                                    <th style={{ textAlign: 'center' }}>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {currentQuestions.length > 0 ? currentQuestions.map((q, i) => (
+                                                    <tr key={q.id} className="table-row fade-in-row" style={{ animationDelay: `${i * 0.05}s` }}>
+                                                        <td style={{ color: '#64748b' }}>{indexOfFirstItem + i + 1}</td>
+                                                        <td style={{ fontWeight: 600, color: '#3b82f6' }}>{q.section || "A"}</td>
+                                                        <td style={{ fontWeight: 600, color: '#f59e0b' }}>{q.level || "Level 1"}</td>
+                                                        <td className="truncate-text" style={{ fontWeight: 600, color: '#1e293b' }} title={q.text}>{q.text}</td>
+
+                                                        <td style={{ color: '#475569', fontSize: '0.85rem' }}>
+                                                            {q.exam_meta?.className || "-"}
+                                                            {q.exam_meta?.subClass ? ` (${q.exam_meta.subClass})` : ""}
+                                                        </td>
+
+                                                        <td style={{ color: '#475569', fontSize: '0.85rem' }}>
+                                                            {q.exam_meta?.subject || "-"}
+                                                            {q.exam_meta?.subSubject ? ` - ${q.exam_meta.subSubject}` : ""}
+                                                        </td>
+
+                                                        <td style={{ color: '#475569', fontSize: '0.85rem' }}>{q.exam_meta?.unit || "-"}</td>
+                                                        <td style={{ color: '#475569', fontSize: '0.85rem' }}>{q.exam_meta?.chapter || "-"}</td>
+
+                                                        <td><span className="badge pop-in">{q.q_type}</span></td>
+                                                        <td><span className={`badge pop-in ${(q.difficulty || 'Medium').toLowerCase()}`}>{q.difficulty || "Medium"}</span></td>
+                                                        <td style={{ fontWeight: 'bold', color: '#1e293b' }}>{q.marks}</td>
+                                                        <td>
+                                                            <div className="action-buttons">
+                                                                <button onClick={() => setViewQ(q)} className="icon-btn btn-view hover-3d" title="View"><Eye size={20} /></button>
+                                                                <button onClick={() => handleEditClick(q)} className="icon-btn btn-edit hover-3d" title="Edit"><Edit2 size={20} /></button>
+                                                                <button onClick={() => initiateDelete(q)} className="icon-btn btn-delete hover-3d" title="Delete"><Trash size={20} /></button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )) : (
+                                                    <tr><td colSpan="12" style={{ textAlign: 'center', padding: '20px' }}>No Questions in Database yet. Add one above!</td></tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+
+                                        {questions.length > itemsPerPage && (
+                                            <div className="pagination-container">
+                                                <button onClick={prevPage} disabled={currentPage === 1} className="page-btn nav-btn"><ChevronLeft size={20} /></button>
+                                                <div className="page-numbers">
+                                                    {Array.from({ length: totalPages }, (_, i) => (
+                                                        <button key={i + 1} onClick={() => paginate(i + 1)} className={`page-btn ${currentPage === i + 1 ? 'active' : ''}`}>{i + 1}</button>
                                                     ))}
                                                 </div>
+                                                <button onClick={nextPage} disabled={currentPage === totalPages} className="page-btn nav-btn"><ChevronRight size={20} /></button>
                                             </div>
-                                        ))}
-                                        <button 
-                                            className="btn-save-quiz hover-lift" 
-                                            onClick={handleSaveToBank}
-                                        >
-                                            <Save size={18}/> Save to Question Bank
-                                        </button>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* 🔥 NEW VIEW: CSV BULK UPLOAD */}
+                {activeTab === "upload" && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div style={{ background: 'white', borderRadius: '16px', padding: '40px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', maxWidth: '750px', margin: '0 auto', width: '100%' }}>
+                            <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '15px', marginBottom: '25px' }}>
+                                <h3 style={{ margin: 0, fontSize: '1.4rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '10px' }}><UploadCloud size={24} color="#3b82f6" /> Bulk Exam Data Upload</h3>
+                                <p style={{ color: '#64748b', fontSize: '0.95rem', marginTop: '5px' }}>Upload hundreds of questions instantly using a CSV file.</p>
+                            </div>
+
+                            <div style={{ marginBottom: '25px' }}>
+                                <label style={{ display: 'block', fontWeight: '700', color: '#1e293b', marginBottom: '10px' }}>Select Question Format</label>
+                                <select
+                                    value={csvExamType}
+                                    onChange={(e) => setCsvExamType(e.target.value)}
+                                    style={{ width: '100%', padding: '15px', borderRadius: '12px', border: '2px solid #e2e8f0', outline: 'none', background: '#f8fafc', fontSize: '1rem', fontWeight: '600', color: '#0f172a' }}
+                                >
+                                    <option value="Objective">Objective Questions (MCQ)</option>
+                                    <option value="Descriptive">Descriptive Questions</option>
+                                    <option value="Mixed">Mixed Format</option>
+                                </select>
+                            </div>
+
+                            <div style={{ border: `2px dashed ${csvFile ? '#10B981' : '#3b82f6'}`, background: csvFile ? '#ecfdf5' : '#eff6ff', padding: '50px 20px', borderRadius: '16px', textAlign: 'center', transition: '0.3s', position: 'relative' }}>
+                                <input
+                                    type="file"
+                                    accept=".csv"
+                                    onChange={handleCsvFileChange}
+                                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+                                />
+                                {csvFile ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                                        <CheckCircle size={48} color="#10B981" />
+                                        <h3 style={{ margin: 0, color: '#065F46' }}>File Selected & Ready</h3>
+                                        <p style={{ margin: 0, color: '#047857', fontWeight: '600' }}>{csvFile.name}</p>
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                                        <UploadCloud size={48} color="#3b82f6" />
+                                        <h3 style={{ margin: 0, color: '#3b82f6' }}>Drag & Drop your CSV file here</h3>
+                                        <p style={{ margin: 0, color: '#64748b' }}>or click anywhere in this box to browse</p>
                                     </div>
                                 )}
                             </div>
-                        )}
 
-                        {activePanel === 'lectures' && (
-                            <div style={{display: 'flex', flexDirection: 'column', gap: '20px'}}>
-                                <div style={{borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 10px 25px rgba(0,0,0,0.1)'}}>
-                                    <ReactPlayer url="https://www.youtube.com/watch?v=ysz5S6PUM-U" width="100%" controls={true} onProgress={(progress) => { if(Math.floor(progress.playedSeconds) === 30) { toast("AI Interactive Quiz Triggered!", {icon: "💡"}); } }} />
-                                </div>
-                                <div style={{padding: '20px', background: '#f0fdf4', borderRadius: '15px', border: '1px solid #bbf7d0'}}>
-                                    <h4 style={{color: '#16a34a', margin: '0 0 10px'}}>Interactive Learning Log</h4>
-                                    <p style={{fontSize: '0.85rem', color: '#166534'}}>System detects your focus. Pop-up quizzes will appear at specific intervals.</p>
+                            <div style={{ marginTop: '20px', padding: '15px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                                <AlertCircle size={20} color="#d97706" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                <div style={{ fontSize: '0.85rem', color: '#92400e' }}>
+                                    <strong>CSV Format Rule:</strong> For Objective, columns should be <code>Question, OptionA, OptionB, OptionC, OptionD, CorrectAnswer</code>. For Descriptive, columns should be <code>Question, MaxMarks</code>.
                                 </div>
                             </div>
-                        )}
 
-                        {activePanel === 'schedule' && (
+                            <button
+                                onClick={handleCsvUpload}
+                                disabled={!csvFile || isUploading}
+                                style={{ width: '100%', marginTop: '25px', background: csvFile ? '#3b82f6' : '#cbd5e1', color: 'white', padding: '16px', borderRadius: '12px', border: 'none', fontSize: '1.1rem', fontWeight: '700', cursor: csvFile ? 'pointer' : 'not-allowed', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', transition: '0.3s' }}
+                            >
+                                {isUploading ? <Loader2 size={24} className="animate-spin" /> : <><Save size={20} /> Upload Database</>}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* TAB 2: LIVE OMR EXAM WITH FEATURE 3: AI OMR SCANNER */}
+                {activeTab === 'omr' && (
+                    <div className="content-wrapper stagger-1">
+                        {!examResult ? (
                             <>
-                                <div className="input-group"><label style={{fontWeight:'900', color:'#000'}}>Exam Title</label><input type="text" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} style={inputStyle} placeholder="e.g. Unit Test - Physics" /></div>
-                                <div className="grid-2-col">
-                                    <div className="input-group"><label style={{fontWeight:'900', color:'#000'}}>Select Batch</label><select value={formData.batch} onChange={(e) => setFormData({...formData, batch: e.target.value})} style={inputStyle}><option>Class 10-A</option><option>Class 12-B</option></select></div>
-                                    <div className="input-group"><label style={{fontWeight:'900', color:'#000'}}>Passing Marks</label><input type="number" value={formData.passingMarks} onChange={(e) => setFormData({...formData, passingMarks: e.target.value})} style={inputStyle} placeholder="33" /></div>
-                                </div>
-                                <button className="btn-confirm-gradient hover-lift" onClick={handleSaveSchedule} style={{marginTop: '20px', width: '100%', padding: '14px', fontWeight: '800'}}>🚀 Publish Schedule</button>
-                            </>
-                        )}
-
-                        {activePanel === 'monitor' && (
-                            <div style={{height: '100%', display: 'flex', flexDirection: 'column', gap: '20px'}}>
-                                <div style={{background: '#f8fafc', padding: '15px', borderRadius: '16px', border: '2px solid #e2e8f0'}}>
-                                    <h4 style={{fontSize: '0.9rem', color: '#1e293b', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px'}}><Camera size={18}/> Proctoring: Identity Verification</h4>
-                                    {!faceVerified ? (
-                                        <div style={{position: 'relative', borderRadius: '12px', overflow: 'hidden'}}>
-                                            <Webcam ref={webcamRef} screenshotFormat="image/jpeg" audio={false} mirrored={true} videoConstraints={{ width: 640, height: 480, frameRate: { ideal: 30, max: 60 }, facingMode: "user" }} style={{width: '100%', height: 'auto', objectFit: 'cover'}} />
-                                            <button className="btn-glow" onClick={handleVerifyFace} disabled={isVerifying} style={{position: 'absolute', bottom: '15px', left: '50%', transform: 'translateX(-50%)', width: '80%'}}>{isVerifying ? "Matching..." : "Scan & Verify Face"}</button>
+                                {/* 🔥 NEW: OMR SCANNER INTEGRATION */}
+                                <div className="card shadow-md mb-20" style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', border: '1px solid #bbf7d0', padding: '20px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
+                                        <div>
+                                            <h3 style={{ margin: 0, color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}><Camera size={20} /> OMR Sheet Auto-Scanner</h3>
+                                            <p style={{ margin: '5px 0 0', color: '#15803d', fontSize: '0.9rem' }}>Upload a physical OMR sheet photo. AI will detect and fill bubbles automatically.</p>
                                         </div>
+                                        <div>
+                                            <input type="file" id="omr-upload" accept="image/*" style={{ display: 'none' }} onChange={simulateOMRScan} />
+                                            <label htmlFor="omr-upload" className="btn-success ripple-effect" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '8px', background: '#10b981', color: 'white', fontWeight: 'bold' }}>
+                                                {isScanningOMR ? <><RefreshCw className="spin" size={18} /> Scanning...</> : <><Camera size={18} /> Upload & Scan OMR</>}
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="exam-meta-header card shadow-md omr-header-card" style={{ marginTop: '20px' }}>
+                                    <div>
+                                        <h2 style={{ margin: 0, color: '#1e293b' }}>{examMeta.examName || "Practice Test"} - Live OMR Exam</h2>
+                                        <p style={{ margin: '5px 0 0', color: '#64748b' }}>
+                                            Class: {examMeta.className} {examMeta.subClass ? `(${examMeta.subClass})` : ''} |
+                                            Sub: {examMeta.subject} {examMeta.subSubject ? `- ${examMeta.subSubject}` : ''} |
+                                            Paper ID: {examMeta.paperId || 'N/A'}
+                                        </p>
+                                        <div style={{ marginTop: '5px' }}>
+                                            <span className="badge medium" style={{ marginRight: '5px' }}>{examMeta.examType}</span>
+                                            <span className="badge medium" style={{ marginRight: '5px' }}>{examMeta.modeOfExam} Mode</span>
+                                            <span className="badge medium">Tools: {examMeta.toolsAllowed}</span>
+                                        </div>
+                                    </div>
+                                    <div className="omr-header-right">
+                                        <div className="badge medium" style={{ fontSize: '1rem', padding: '8px 15px' }}>Time: {examMeta.timeAllowed}</div>
+                                    </div>
+                                </div>
+
+                                <div className="card shadow-md" style={{ padding: '30px', marginTop: '20px' }}>
+                                    {questions.filter(q => q.q_type === 'MCQ' || q.q_type === 'True/False').length > 0 ? (
+                                        questions.filter(q => q.q_type === 'MCQ' || q.q_type === 'True/False').map((q, index) => {
+                                            const activeOptions = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].filter(opt => q[`option_${opt.toLowerCase()}`] && q[`option_${opt.toLowerCase()}`].trim() !== "");
+                                            const finalOptions = activeOptions.length > 0 ? activeOptions : ['A', 'B', 'C', 'D'];
+
+                                            return (
+                                                <div key={q.id} className="omr-question-row">
+                                                    <div className="omr-q-text">
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                            <span className="q-no">{index + 1}.</span> {q.text}
+                                                        </div>
+                                                        <div className="q-marking-info">Sec: {q.section || 'A'} | {q.level || 'Level 1'} | (+{q.marks} / -{q.negative_marks || 0})</div>
+                                                    </div>
+
+                                                    <div className="omr-options-grid">
+                                                        {q.q_type === 'MCQ' ? (
+                                                            finalOptions.map(opt => (
+                                                                <div key={opt} className="omr-option-wrapper">
+                                                                    <div
+                                                                        className={`omr-bubble ${studentAnswers[q.id] === opt ? 'selected' : ''}`}
+                                                                        onClick={() => handleOMRSelect(q.id, opt)}
+                                                                    >
+                                                                        {opt}
+                                                                    </div>
+                                                                    <span className="omr-opt-text">{q[`option_${opt.toLowerCase()}`] || `Option ${opt}`}</span>
+                                                                </div>
+                                                            ))
+                                                        ) : (
+                                                            ['A', 'B'].map((opt, idx) => (
+                                                                <div key={opt} className="omr-option-wrapper">
+                                                                    <div
+                                                                        className={`omr-bubble ${studentAnswers[q.id] === opt ? 'selected' : ''}`}
+                                                                        onClick={() => handleOMRSelect(q.id, opt)}
+                                                                    >
+                                                                        {opt}
+                                                                    </div>
+                                                                    <span className="omr-opt-text">{idx === 0 ? 'True' : 'False'}</span>
+                                                                </div>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )
+                                        })
                                     ) : (
-                                        <div style={{textAlign: 'center', padding: '20px', background: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0'}}><UserCheck size={48} color="#16a34a" style={{margin: '0 auto 10px'}}/><b style={{color: '#16a34a'}}>Student ID #101 Verified: Naveen Soni</b></div>
+                                        <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>No Objective Questions (MCQ/True-False) found in this paper set.</div>
+                                    )}
+
+                                    {questions.filter(q => q.q_type === 'MCQ' || q.q_type === 'True/False').length > 0 && (
+                                        <div className="submit-exam-wrapper">
+                                            <button onClick={submitOMR} className="btn-primary submit-exam-btn">
+                                                <CheckSquare size={24} style={{ marginRight: '10px' }} /> Submit Exam & Calculate Result
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
-                                <div style={{background: '#fee2e2', padding: '15px', borderRadius: '12px', border: '1px solid #fecaca', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                                    <div><h4 style={{margin: 0, color: '#991b1b', fontWeight: '900', fontSize: '1rem'}}>🔴 LIVE FEED</h4></div>
-                                    <div style={{textAlign: 'right'}}><span style={{display: 'block', fontSize: '1.8rem', fontWeight: '900', color: '#dc2626', fontFamily: 'monospace'}}>{formatTime(timeLeft)}</span></div>
+                            </>
+                        ) : (
+                            <div className="card shadow-md scale-up-bounce" style={{ padding: '40px', textAlign: 'center' }}>
+                                <div style={{ width: '80px', height: '80px', background: '#dcfce7', color: '#16a34a', borderRadius: '50%', display: 'flex', alignItems: 'center', justify: 'center', margin: '0 auto 20px' }}>
+                                    <Award size={40} />
                                 </div>
-                                <div style={{display: 'flex', gap: '10px'}}><button className="btn-secondary-sm" onClick={handlePauseExam} style={{flex: 1, borderColor: '#dc2626', color: '#dc2626', fontWeight: '800'}}>⏸ Pause</button><button className="btn-secondary-sm" onClick={handleMessageAll} style={{flex: 1, borderColor: '#0f172a', color: '#0f172a', fontWeight: '800'}}>📩 Warning</button></div>
-                                <h5 style={{margin: '0', color: '#64748b', fontWeight: '800'}}>CANDIDATE STATUS</h5>
-                                <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', overflowY: 'auto', flex: 1}}>
-                                    {studentStatus.map((s) => (
-                                        <div key={s.id} style={{background: s.status === 'offline' ? '#fef2f2' : s.status === 'warning' ? '#fffbeb' : '#f0fdf4', border: `1px solid ${s.status === 'offline' ? '#fecaca' : s.status === 'warning' ? '#fde68a' : '#bbf7d0'}`, padding: '10px', borderRadius: '10px', textAlign: 'center'}}>
-                                            <div style={{width: '35px', height: '35px', borderRadius: '50%', background: '#fff', margin: '0 auto 5px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', fontWeight: '800', border: '1px solid #e2e8f0'}}>{s.name.charAt(0)}</div>
-                                            <b style={{display: 'block', fontSize: '0.8rem', color: '#0f172a'}}>{s.name}</b><span style={{fontSize: '0.65rem', fontWeight: '800', color: s.status === 'offline' ? '#dc2626' : s.status === 'warning' ? '#d97706' : '#16a34a'}}>{s.msg}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                                <div style={{marginTop: 'auto', background: '#1e293b', padding: '15px', borderRadius: '12px', color: '#fff', fontSize: '0.85rem', height: '100px', overflowY: 'auto'}}>
-                                    <div style={{marginBottom: '5px', borderBottom: '1px solid #334155', fontWeight: '800', color: '#94a3b8'}}>📡 SYSTEM ACTIVITY LOG</div>
-                                    {liveLogs.map((log, index) => (<div key={index} style={{color: log.includes('🔴') ? '#f87171' : log.includes('⚠️') ? '#fbbf24' : '#4ade80', marginBottom: '4px'}}>{log}</div>))}
-                                </div>
-                            </div>
-                        )}
+                                <h2 style={{ fontSize: '2.5rem', color: '#1e293b', margin: '0 0 5px' }}>Exam Completed!</h2>
+                                <p style={{ color: '#64748b', fontSize: '1.1rem', marginBottom: '30px' }}>Auto-Calculated Result with Detailed Formula Analysis.</p>
 
-                        {activePanel === 'reportCard' && selectedStudentForReport && (
-                            <div id="printable-report" className="report-card-container">
-                                <div className="report-header"><div style={{fontSize:'2.5rem'}}>🏫</div><div style={{textAlign:'center', flex:1}}><h1 style={{margin:0, color:'#0f172a', textTransform:'uppercase', letterSpacing:'1px', fontSize:'1.8rem'}}>Shivadda Academy</h1><p style={{margin:'5px 0', fontSize:'0.9rem', color:'#64748b'}}>Affiliated to CBSE, New Delhi | School Code: 1024</p></div><div style={{width:'80px', height:'100px', border:'1px solid #cbd5e1', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.7rem', color:'#94a3b8', background:'#f8fafc'}}>Student Photo</div></div>
-                                <div className="student-details-box" style={{color: '#0f172a'}}><div className="grid-2-col-compact"><div><span className="label">Student Name:</span> <b style={{color: '#000'}}>{selectedStudentForReport.name}</b></div><div><span className="label">Roll Number:</span> <b style={{color: '#000'}}>{selectedStudentForReport.roll}</b></div><div><span className="label">Class/Section:</span> <b style={{color: '#000'}}>10 - A</b></div><div><span className="label">Attendance:</span> <b style={{color: '#000'}}>{selectedStudentForReport.attendance}</b></div></div></div>
-                                <table className="report-table"><thead><tr><th>SUBJECT</th><th>MAX</th><th>OBTAINED</th><th>GRADE</th></tr></thead><tbody>{Object.entries(selectedStudentForReport.marks).map(([sub, score]) => (<tr key={sub}><td>{sub}</td><td>100</td><td>{score}</td><td style={{color: score < 33 ? '#dc2626' : '#16a34a'}}>{calculateGrade(score)}</td></tr>))}</tbody></table>
-                                <button className="btn-confirm-gradient hover-lift no-print" onClick={handlePrint} style={{width:'100%', marginTop: '30px', padding: '14px', fontSize: '1rem'}}>🖨️ Print Report Card</button>
+                                <div className="result-stats-grid">
+                                    <div className="r-stat-card">
+                                        <div className="r-label">Max Marks</div>
+                                        <div className="r-value">{examResult.totalMaxMarks}</div>
+                                    </div>
+                                    <div className="r-stat-card" style={{ borderBottom: '4px solid #10b981' }}>
+                                        <div className="r-label">Correct (+{examResult.correctCount})</div>
+                                        <div className="r-value" style={{ color: '#10b981' }}>{examResult.totalCorrectMarksAwarded}</div>
+                                    </div>
+                                    <div className="r-stat-card" style={{ borderBottom: '4px solid #ef4444' }}>
+                                        <div className="r-label">Incorrect (-{examResult.incorrectCount})</div>
+                                        <div className="r-value" style={{ color: '#ef4444' }}>{examResult.totalIncorrectMarksDeducted}</div>
+                                    </div>
+                                    <div className="r-stat-card" style={{ borderBottom: '4px solid #f59e0b' }}>
+                                        <div className="r-label">Not Attempted</div>
+                                        <div className="r-value" style={{ color: '#f59e0b' }}>{examResult.totalUnattemptedMarksDeducted}</div>
+                                    </div>
+                                </div>
+
+                                <div className="final-score-box">
+                                    <div>
+                                        <div style={{ fontSize: '1rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 'bold' }}>Obtained Marks</div>
+                                        <div style={{ fontSize: '0.85rem', color: '#94a3b8', margin: '8px 0' }}>
+                                            (Correct: {examResult.totalCorrectMarksAwarded}) - (Incorrect: {examResult.totalIncorrectMarksDeducted}) - (Not Attempt: {examResult.totalUnattemptedMarksDeducted})
+                                        </div>
+                                        <div style={{ fontSize: '4.5rem', fontWeight: '900', color: '#3b82f6', lineHeight: 1 }}>{examResult.obtainedMarks} <span style={{ fontSize: '1.5rem', color: '#94a3b8' }}>/ {examResult.totalMaxMarks}</span></div>
+                                        <div style={{ fontSize: '1.2rem', color: '#475569', marginTop: '10px', fontWeight: 'bold' }}>Percentage: {examResult.percentage}%</div>
+                                    </div>
+                                    <div className="grade-circle">
+                                        <span style={{ fontSize: '1rem', opacity: 0.8 }}>GRADE</span>
+                                        <strong style={{ fontSize: '4rem', lineHeight: 1 }}>{examResult.grade}</strong>
+                                    </div>
+                                </div>
+
+                                <div style={{ marginTop: '40px', textAlign: 'left' }}>
+                                    <h3 style={{ color: '#1e293b', borderBottom: '2px solid #e2e8f0', paddingBottom: '10px', marginBottom: '20px' }}>Detailed OMR Sheet Summary</h3>
+                                    <div className="table-wrapper">
+                                        <table className="modern-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Ans No.</th>
+                                                    <th>MM</th>
+                                                    <th>Section</th>
+                                                    <th>Correct Option</th>
+                                                    <th>Your Attempt</th>
+                                                    <th>Status</th>
+                                                    <th>Marks Awarded</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {detailedResults.map((res, i) => (
+                                                    <tr key={i} style={{ background: res.status === 'Correct' ? '#f0fdf4' : res.status === 'Incorrect' ? '#fef2f2' : '#fffbeb' }}>
+                                                        <td style={{ fontWeight: 'bold' }}>{res.qNo}</td>
+                                                        <td>{res.mm}</td>
+                                                        <td>{res.section}</td>
+                                                        <td style={{ fontWeight: 'bold', color: '#10b981' }}>{res.correctOption}</td>
+                                                        <td style={{ fontWeight: 'bold' }}>{res.attempted}</td>
+                                                        <td>
+                                                            <span className={`badge ${res.status === 'Correct' ? 'easy' : res.status === 'Incorrect' ? 'hard' : 'medium'}`}>
+                                                                {res.status}
+                                                            </span>
+                                                        </td>
+                                                        <td style={{ fontWeight: 'bold', color: res.marksAwarded > 0 ? '#10b981' : res.marksAwarded < 0 ? '#ef4444' : '#f59e0b' }}>
+                                                            {res.marksAwarded > 0 ? `+${res.marksAwarded}` : res.marksAwarded}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', marginTop: '30px', flexWrap: 'wrap' }}>
+                                    <button onClick={() => { setExamResult(null); setStudentAnswers({}); }} className="btn-secondary"><RefreshCw size={18} /> Retake Exam</button>
+                                    <button className="btn-success" onClick={() => toast("Awardlist Generated Successfully!")}><List size={18} /> Generate Awardlists</button>
+                                    <button className="btn-primary" style={{ background: '#8b5cf6' }} onClick={() => toast("Request Sent to Payment Gateway!")}><ShoppingCart size={18} /> Get Evaluated Sheet (PAY RS)</button>
+                                    <button className="btn-primary" style={{ background: '#f59e0b' }} onClick={() => toast("Request Sent to Payment Gateway!")}><ShoppingCart size={18} /> Corrected Answer Sheet (PAY RS)</button>
+                                </div>
                             </div>
                         )}
                     </div>
-                </div>
-            </div>
-        )}
-      </div>
+                )}
 
-      <style>{`
-        .gradient-text { background: linear-gradient(135deg, #0f172a 0%, #334155 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .grid-2-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-        .student-row-card { display: flex; justifyContent: space-between; alignItems: center; background: #f8fafc; padding: 15px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #e2e8f0; transition: 0.2s; }
-        .btn-secondary-sm { background: white; border: 1px solid #cbd5e1; padding: 8px 15px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.8rem; color: #475569; transition: 0.2s; }
-        .btn-secondary-sm:hover { background: #0f172a; color: white; border-color: #0f172a; }
-        .report-panel { width: 750px; } 
-        .report-card-container { background: white; padding: 40px; border: 1px solid #e2e8f0; position: relative; font-family: 'Times New Roman', serif; }
-        .report-header { display: flex; border-bottom: 3px solid #0f172a; padding-bottom: 20px; margin-bottom: 20px; }
-        .student-details-box { background: #f8fafc; padding: 20px; border: 1px solid #0f172a; margin-bottom: 25px; }
-        .grid-2-col-compact { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 40px; }
-        .label { color: #64748b; font-size: 0.9rem; margin-right: 10px; }
-        .report-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #0f172a; }
-        .report-table th { background: #0f172a; color: white; padding: 10px; text-align: left; font-size: 0.9rem; border: 1px solid #0f172a; }
-        .report-table td { padding: 10px; border: 1px solid #cbd5e1; color: #0f172a; }
-        @media print { body * { visibility: hidden; } .no-print { display: none !important; } #printable-report, #printable-report * { visibility: visible; } #printable-report { position: fixed; left: 0; top: 0; width: 100%; height: 100%; margin: 0; border: none; z-index: 9999; background: white; } }
-        .luxe-panel { width: 480px; height: 100%; background: white; padding: 35px; display: flex; flex-direction: column; box-shadow: -20px 0 60px rgba(0,0,0,0.15); overflow-y: auto; transition: 0.3s; }
-        .overlay-blur { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.3); backdrop-filter: blur(8px); z-index: 2000; display: flex; justify-content: flex-end; }
-        .btn-confirm-gradient { background: linear-gradient(135deg, #0f172a 0%, #334155 100%); border: none; color: white; border-radius: 12px; font-weight: 700; cursor: pointer; }
-        .stat-card-glass { flex: 1; background: #ffffff; padding: 20px; border-radius: 20px; box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.08); border: 1px solid #e2e8f0; }
-        .icon-box { width: 50px; height: 50px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
-        .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; }
-        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(30px); border-radius: 32px; border: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 20px 60px -15px rgba(0,0,0,0.08); }
-        .floating-row { transition: all 0.3s; border-radius: 18px; }
-        .btn-results { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; }
-        .btn-monitor { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; }
-        .btn-edit { background: #eff6ff; color: #3b82f6; border: 1px solid #bfdbfe; padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; }
-        .btn-glow { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); border: none; color: white; padding: 10px 22px; border-radius: 50px; font-weight: 700; cursor: pointer; }
-        .close-circle-btn { width: 36px; height: 36px; border-radius: 50%; background: #f1f5f9; border: none; cursor: pointer; color: #64748b; font-size: 1rem; }
-        .spin-slow { animation: spin 2s linear infinite; }
-        .spin-fast { animation: spin 0.8s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        /* NEW AI STYLES */
-        .ai-hero-card { background: linear-gradient(135deg, #7c3aed 0%, #db2777 100%); padding: 25px; border-radius: 24px; color: white; position: relative; overflow: hidden; box-shadow: 0 10px 30px rgba(219, 39, 119, 0.3); }
-        .glass-icon { background: rgba(255,255,255,0.2); width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px); }
-        .ai-textarea { width: 100%; height: 80px; background: transparent; border: none; outline: none; color: white; font-size: 1.1rem; font-weight: 600; padding: 10px; resize: none; }
-        .ai-textarea::placeholder { color: rgba(255,255,255,0.7); }
-        .btn-ai-generate { width: 100%; margin-top: 15px; background: white; color: #db2777; border: none; padding: 12px; border-radius: 12px; font-weight: 800; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 10px; transition: 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        .btn-ai-generate:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.15); }
-        .ai-question-card { background: white; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); transition: 0.3s; }
-        .ai-question-card:hover { transform: translateY(-2px); border-color: #d8b4fe; box-shadow: 0 8px 20px rgba(139, 92, 246, 0.1); }
-        .ai-option { padding: 12px; border-radius: 10px; font-size: 0.9rem; background: #f8fafc; border: 1px solid #f1f5f9; color: #64748b; font-weight: 500; display: flex; align-items: center; gap: 10px; transition: 0.2s; }
-        .ai-option.correct { background: #f0fdf4; border-color: #bbf7d0; color: #166534; font-weight: 700; }
-        .btn-save-quiz { width: 100%; padding: 14px; background: #1e293b; color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 10px; }
-      `}</style>
-    </div>
-  );
+                {/* TAB 3: EVALUATION WITH FEATURE 2: 3-TEACHER CHECKING AVERAGE */}
+                {activeTab === 'evaluation' && (
+                    <div className="content-wrapper">
+                        <div className="card shadow-md stagger-1">
+                            <div className="exam-meta-header omr-header-card">
+                                <div>
+                                    <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#1e293b' }}>
+                                        {examMeta.examName || "Mid-Term Physics"} - {examMeta.className || "Class 10"} {examMeta.subClass ? `(${examMeta.subClass})` : ''}
+                                    </h2>
+                                    <p style={{ margin: '5px 0 0', color: '#64748b', fontSize: '0.9rem' }}>Subject: {examMeta.subject || "Physics"} {examMeta.subSubject ? `- ${examMeta.subSubject}` : ''} | Set By: {examMeta.teacherName || "Mr. Sharma"}</p>
+                                    <div className="tags" style={{ marginTop: '10px' }}>
+                                        <span className="meta-tag">Max Marks: {examMeta.maxMarks || "100"}</span>
+                                        <span className="meta-tag">Time: {examMeta.timeAllowed || "3 Hrs"}</span>
+                                        <span className="meta-tag">Paper ID: {examMeta.paperId || "N/A"}</span>
+                                    </div>
+                                </div>
+                                <div className="omr-header-right">
+                                    <div style={{ fontWeight: "bold", color: "#64748b" }}>Examinee Body: {examMeta.examineeBody || "CBSE"}</div>
+                                    <div style={{ fontSize: "0.9rem", color: "#94a3b8" }}>Paper Set: {examMeta.paperSetNumber || "A-102"}</div>
+                                </div>
+                            </div>
+
+                            <div className="answer-sheet-preview">
+                                <h4 style={{ margin: "0 0 10px 0", display: "flex", alignItems: "center", gap: "10px", color: "#475569" }}><FileText size={18} /> Student Answer: Q1 - Explain Newton's Law</h4>
+                                <p className="handwriting-font typing-effect">
+                                    "{currentSubmission?.answer_text || "Newton's first law states that an object remains in a state of rest or of uniform motion in a straight line unless compelled to change that state by an applied force."}"
+                                </p>
+                            </div>
+
+                            {/* 🔥 NEW: 3-TEACHER FINAL AVERAGE DISPLAY */}
+                            <h3 style={{ margin: "20px 0 15px", color: "#1e293b", display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                Evaluation Status (3-Tier)
+                                <span className="badge" style={{ background: '#3b82f6', color: 'white', fontSize: '1rem' }}>Final Avg: {finalAverage}/100</span>
+                            </h3>
+
+                            <div className="evaluation-grid">
+                                <div className={`eval-card ${evaluations.teacher1.status === 'Done' ? 'done' : 'pending'} pop-in delay-1 hover-lift`}>
+                                    <div className="eval-header"><UserCheck size={18} /> Evaluator 1 (T1)</div>
+                                    <div className="eval-score">{evaluations.teacher1.score !== null ? evaluations.teacher1.score : '--'}/100</div>
+                                    <p className="eval-comment">"{evaluations.teacher1.comments || "Waiting..."}"</p>
+                                </div>
+                                <div className={`eval-card ${evaluations.teacher2.status === 'Done' ? 'done' : 'pending'} pop-in delay-2 hover-lift`}>
+                                    <div className="eval-header"><UserCheck size={18} /> Evaluator 2 (T2)</div>
+                                    <div className="eval-score">{evaluations.teacher2.score !== null ? evaluations.teacher2.score : '--'}/100</div>
+                                    <p className="eval-comment">"{evaluations.teacher2.comments || "Waiting..."}"</p>
+                                </div>
+                                <div className={`eval-card ${evaluations.teacher3.status === 'Done' ? 'done' : 'pending'} pop-in delay-3 hover-lift`}>
+                                    <div className="eval-header"><Clock size={18} /> Evaluator 3 (T3)</div>
+                                    {evaluations.teacher3.status === 'Done' ? (
+                                        <>
+                                            <div className="eval-score">{evaluations.teacher3.score}/100</div>
+                                            <p className="eval-comment">"{evaluations.teacher3.comments}"</p>
+                                        </>
+                                    ) : (
+                                        <div style={{ marginTop: '10px' }}>
+                                            <button className="btn-primary" onClick={submitTeacher3Score} style={{ width: '100%', padding: '10px' }}>Submit T3 Score (85)</button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="ai-check-box stagger-3">
+                                <div>
+                                    <h3 style={{ margin: 0, color: "#166534", display: "flex", alignItems: "center", gap: "10px" }}><Brain size={24} /> AI Auto-Check</h3>
+                                    <p style={{ margin: 0, color: "#15803d", fontSize: '0.9rem' }}>AI verifies descriptive answers against keywords.</p>
+                                </div>
+                                {aiScore ? (
+                                    <div style={{ textAlign: "right" }} className="pop-in-bounce">
+                                        <span style={{ fontSize: "2rem", fontWeight: "900", color: "#16a34a" }}>{aiScore}/100</span>
+                                        <div style={{ fontSize: "0.8rem", color: "#166534" }}>AI Confidence: 98%</div>
+                                    </div>
+                                ) : (
+                                    <button onClick={handleAiCheck} className="btn-ai ripple-effect ai-analysis-btn">Run AI Analysis <Zap size={16} /></button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* =========================================================
+                    TAB 4: FEATURE 1: LIVE QUIZ (WHITE THEME & RESPONSIVE)
+                    ========================================================= */}
+                {activeTab === 'quiz' && (
+                    <div className="content-wrapper stagger-1">
+                        <div className="card shadow-md" style={{ background: '#ffffff', color: '#1e293b', padding: '40px', borderRadius: '24px', border: '1px solid #e2e8f0' }}>
+                            <div className="quiz-header-wrapper" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', flexWrap: 'wrap', gap: '20px' }}>
+                                <div>
+                                    <h2 style={{ margin: 0, fontSize: '2rem', display: 'flex', alignItems: 'center', gap: '10px', color: '#1e293b' }}>
+                                        <Zap color="#f59e0b" fill="#f59e0b" /> Mega Live Quiz
+                                    </h2>
+                                    <p style={{ color: '#64748b', margin: '5px 0 0' }}>Select a group and start the timer.</p>
+                                </div>
+
+                                {/* 🔥 UPDATED FLICKERING LIGHTS UI (LIGHT MODE) */}
+                                <div className="quiz-lights-container light-mode-lights">
+                                    <div className={`q-light red ${quizLight === 'red' ? 'active' : ''}`}>READY</div>
+                                    <div className={`q-light yellow ${quizLight === 'yellow' ? 'active' : ''}`}>TIMEOUT</div>
+                                    <div className={`q-light green ${quizLight === 'green' ? 'active flickering' : ''}`}>ANSWERING</div>
+                                </div>
+                            </div>
+
+                            {/* 🔥 TIMER DISPLAY (LIGHT MODE) */}
+                            <div className="quiz-timer-display" style={{ textAlign: 'center', margin: '40px 0' }}>
+                                <div className="timer-text" style={{ fontSize: '6rem', fontWeight: '900', color: quizTimer <= 5 ? '#ef4444' : '#3b82f6', fontFamily: 'monospace', lineHeight: 1 }}>
+                                    00:{quizTimer < 10 ? `0${quizTimer}` : quizTimer}
+                                </div>
+                                <div className="timer-action-btns" style={{ marginTop: '20px', display: 'flex', gap: '15px', justify: 'center', flexWrap: 'wrap' }}>
+                                    <button className="btn-primary" style={{ background: '#10b981', padding: '12px 30px', fontSize: '1.1rem' }} onClick={() => startQuizRound(40)} disabled={isTimerRunning}><Play size={18} style={{ marginRight: '8px' }} /> Start 40s (Main)</button>
+                                    <button className="btn-primary" style={{ background: '#f59e0b', padding: '12px 30px', fontSize: '1.1rem' }} onClick={() => startQuizRound(20)} disabled={isTimerRunning}><Play size={18} style={{ marginRight: '8px' }} /> Pass 20s</button>
+                                    <button className="btn-danger" style={{ padding: '12px 30px', fontSize: '1.1rem' }} onClick={stopQuizRound} disabled={!isTimerRunning}><Pause size={18} style={{ marginRight: '8px' }} /> Stop</button>
+                                </div>
+                            </div>
+
+                            {/* 🔥 5 GROUPS SCOREBOARD (LIGHT MODE) */}
+                            <div className="quiz-groups-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '15px', marginTop: '40px' }}>
+                                {quizGroups.map((g) => (
+                                    <div key={g.id}
+                                        className={`quiz-group-card ${activeGroup === g.id ? 'active-group-light' : ''}`}
+                                        onClick={() => setActiveGroup(g.id)}
+                                        style={{
+                                            background: activeGroup === g.id ? '#eff6ff' : '#ffffff',
+                                            border: `2px solid ${activeGroup === g.id ? '#3b82f6' : '#e2e8f0'}`,
+                                            padding: '20px', borderRadius: '16px', textAlign: 'center', cursor: 'pointer', transition: '0.3s'
+                                        }}>
+                                        <h3 style={{ margin: '0 0 10px 0', color: '#64748b', fontSize: '1.5rem' }}>{g.id}</h3>
+                                        <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: activeGroup === g.id ? '#1d4ed8' : '#1e293b' }}>{g.score + g.bonus}</div>
+                                        <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Main: {g.score} | Bonus: {g.bonus}</div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* 🔥 AWARD MARKS SECTION (LIGHT MODE) */}
+                            {activeGroup && !isTimerRunning && (
+                                <div className="award-marks-section" style={{ textAlign: 'center', marginTop: '30px', padding: '20px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                                    <h4 style={{ color: '#475569', margin: '0 0 15px 0' }}>Award Marks to {activeGroup}</h4>
+                                    <div className="award-btns" style={{ display: 'flex', gap: '10px', justify: 'center', flexWrap: 'wrap' }}>
+                                        <button className="btn-success" style={{ padding: '10px 20px' }} onClick={() => awardQuizMarks('main')}>+10 (Correct Ans)</button>
+                                        <button className="btn-primary" style={{ background: '#f59e0b', padding: '10px 20px' }} onClick={() => awardQuizMarks('bonus')}>+5 (Bonus Pass)</button>
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+                    </div>
+                )}
+
+                {/* --- MODALS SECTION --- */}
+                {viewQ && (
+                    <div className="modal-overlay glass-overlay fade-in">
+                        <div className="modal-content premium-modal scale-up-bounce" style={{ display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+                            <div className="modal-decorative-bg"></div>
+
+                            <div className="modal-header-premium" style={{ flexShrink: 0 }}>
+                                <div className="header-text">
+                                    <span className="subtitle">Sec: {viewQ.section || 'A'} | {viewQ.level || 'Level 1'}</span>
+                                    <h3>Overview</h3>
+                                </div>
+                                <button onClick={() => setViewQ(null)} className="close-btn-premium"><X size={24} /></button>
+                            </div>
+
+                            <div className="modal-body-premium" style={{ overflowY: 'auto', flex: 1 }}>
+                                <div className="question-hero">
+                                    <div className="q-icon"><FileText size={32} /></div>
+                                    <p className="q-text">"{viewQ.text}"</p>
+                                    {viewQ.q_type === 'MCQ' && (
+                                        <div style={{ marginTop: '15px', color: '#475569', fontSize: '0.95rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
+                                            <div style={{ fontWeight: viewQ.correct_option === 'A' ? 'bold' : 'normal', color: viewQ.correct_option === 'A' ? '#10b981' : '' }}>A) {viewQ.option_a}</div>
+                                            <div style={{ fontWeight: viewQ.correct_option === 'B' ? 'bold' : 'normal', color: viewQ.correct_option === 'B' ? '#10b981' : '' }}>B) {viewQ.option_b}</div>
+                                            {viewQ.option_c && <div style={{ fontWeight: viewQ.correct_option === 'C' ? 'bold' : 'normal', color: viewQ.correct_option === 'C' ? '#10b981' : '' }}>C) {viewQ.option_c}</div>}
+                                            {viewQ.option_d && <div style={{ fontWeight: viewQ.correct_option === 'D' ? 'bold' : 'normal', color: viewQ.correct_option === 'D' ? '#10b981' : '' }}>D) {viewQ.option_d}</div>}
+                                            {viewQ.option_e && <div style={{ fontWeight: viewQ.correct_option === 'E' ? 'bold' : 'normal', color: viewQ.correct_option === 'E' ? '#10b981' : '' }}>E) {viewQ.option_e}</div>}
+                                            {viewQ.option_f && <div style={{ fontWeight: viewQ.correct_option === 'F' ? 'bold' : 'normal', color: viewQ.correct_option === 'F' ? '#10b981' : '' }}>F) {viewQ.option_f}</div>}
+                                            {viewQ.option_g && <div style={{ fontWeight: viewQ.correct_option === 'G' ? 'bold' : 'normal', color: viewQ.correct_option === 'G' ? '#10b981' : '' }}>G) {viewQ.option_g}</div>}
+                                            {viewQ.option_h && <div style={{ fontWeight: viewQ.correct_option === 'H' ? 'bold' : 'normal', color: viewQ.correct_option === 'H' ? '#10b981' : '' }}>H) {viewQ.option_h}</div>}
+                                        </div>
+                                    )}
+
+                                    <div style={{ marginTop: '15px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                        <span className="badge medium">Unit: {viewQ.exam_meta?.unit || "N/A"}</span>
+                                        <span className="badge medium">Chapter: {viewQ.exam_meta?.chapter || "N/A"}</span>
+                                        <span className="badge medium">Paper ID: {viewQ.exam_meta?.paperId || "N/A"}</span>
+                                    </div>
+                                </div>
+
+                                <div className="stats-grid">
+                                    <div className="stat-card blue">
+                                        <div className="stat-icon"><Layers size={20} /></div>
+                                        <div>
+                                            <span className="stat-label">Type</span>
+                                            <span className="stat-value">{viewQ.q_type}</span>
+                                        </div>
+                                    </div>
+                                    <div className="stat-card purple">
+                                        <div className="stat-icon"><BarChart2 size={20} /></div>
+                                        <div>
+                                            <span className="stat-label">Difficulty</span>
+                                            <span className="stat-value">{viewQ.difficulty || "Medium"}</span>
+                                        </div>
+                                    </div>
+                                    <div className="stat-card orange">
+                                        <div className="stat-icon"><Award size={20} /></div>
+                                        <div>
+                                            <span className="stat-label">Marks System</span>
+                                            <span className="stat-value">+{viewQ.marks} / -{viewQ.negative_marks || 0}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="modal-footer-premium" style={{ flexShrink: 0 }}>
+                                <button onClick={() => { setViewQ(null); handleEditClick(viewQ); }} className="btn-edit-premium">
+                                    <Edit2 size={16} /> Edit Question
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {showEditModal && (
+                    <div className="modal-overlay glass-overlay fade-in" onClick={handleCancelEdit}>
+                        <div className="modal-content premium-modal scale-up-bounce" onClick={e => e.stopPropagation()} style={{ padding: '30px', overflowY: 'auto', maxHeight: '90vh', width: '700px', maxWidth: '95vw', display: 'flex', flexDirection: 'column' }}>
+                            <div className="modal-header-premium" style={{ padding: '0 0 20px 0', borderBottom: '1px solid #e2e8f0', marginBottom: '20px', flexShrink: 0 }}>
+                                <h3 style={{ margin: 0, color: '#1e293b', fontSize: '1.5rem' }}>Edit Question & Attributes</h3>
+                                <button onClick={handleCancelEdit} className="close-btn-premium" style={{ width: '35px', height: '35px' }}><X size={18} /></button>
+                            </div>
+                            <div className="card-body form-grid-modal" style={{ padding: 0, flex: 1 }}>
+
+                                <div className="input-group full-width-grid" style={{ marginBottom: '15px' }}>
+                                    <input type="text" placeholder="Enter Question Text..." className="input-field" value={newQ.text} onChange={(e) => setNewQ({ ...newQ, text: e.target.value })} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '1rem', boxSizing: 'border-box' }} />
+                                </div>
+
+                                <div className="grid-3-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px', width: '100%', marginBottom: '15px' }}>
+                                    <select className="input-field hover-glow" value={newQ.q_type} onChange={(e) => setNewQ({ ...newQ, q_type: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px' }}>
+                                        <option value="Descriptive">Descriptive</option>
+                                        <option value="MCQ">MCQ</option>
+                                        <option value="True/False">True/False</option>
+                                        <option value="Both">Both</option>
+                                        <option value="None">None</option>
+                                    </select>
+                                    <select className="input-field hover-glow" value={newQ.difficulty} onChange={(e) => setNewQ({ ...newQ, difficulty: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px' }}>
+                                        <option value="Easy">Easy</option><option value="Medium">Medium</option><option value="Hard">Hard</option>
+                                    </select>
+                                    <input type="text" placeholder="Section (A, B)" className="input-field hover-glow" value={newQ.section} onChange={(e) => setNewQ({ ...newQ, section: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px', boxSizing: 'border-box' }} />
+                                    <select className="input-field hover-glow" value={newQ.level} onChange={(e) => setNewQ({ ...newQ, level: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px' }}>
+                                        <option value="Level 1">Level 1</option><option value="Level 2">Level 2</option><option value="Level 3">Level 3</option><option value="Level 4">Level 4</option>
+                                    </select>
+                                </div>
+
+                                <div className="grid-3-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', width: '100%', marginBottom: '25px' }}>
+                                    <input type="number" placeholder="+ Marks" className="input-field hover-glow" value={newQ.marks} onChange={(e) => setNewQ({ ...newQ, marks: parseFloat(e.target.value) || 0 })} style={{ width: '100%', padding: '12px', borderRadius: '10px', boxSizing: 'border-box' }} />
+                                    <input type="number" placeholder="- Negative Marks" className="input-field hover-glow" value={newQ.negative_marks} onChange={(e) => setNewQ({ ...newQ, negative_marks: parseFloat(e.target.value) || 0 })} style={{ width: '100%', padding: '12px', borderRadius: '10px', boxSizing: 'border-box' }} />
+                                    <input type="number" placeholder="Unattempted Marks" className="input-field hover-glow" value={newQ.unattempted_marks} onChange={(e) => setNewQ({ ...newQ, unattempted_marks: parseFloat(e.target.value) || 0 })} style={{ width: '100%', padding: '12px', borderRadius: '10px', boxSizing: 'border-box' }} />
+                                </div>
+
+                                {newQ.q_type === 'MCQ' && (
+                                    <div className="mcq-options-row full-width-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '25px' }}>
+                                        <input type="text" placeholder="Option A" className="input-field" value={newQ.option_a} onChange={(e) => setNewQ({ ...newQ, option_a: e.target.value })} style={{ padding: '12px', borderRadius: '10px' }} />
+                                        <input type="text" placeholder="Option B" className="input-field" value={newQ.option_b} onChange={(e) => setNewQ({ ...newQ, option_b: e.target.value })} style={{ padding: '12px', borderRadius: '10px' }} />
+                                        <input type="text" placeholder="Option C" className="input-field" value={newQ.option_c} onChange={(e) => setNewQ({ ...newQ, option_c: e.target.value })} style={{ padding: '12px', borderRadius: '10px' }} />
+                                        <input type="text" placeholder="Option D" className="input-field" value={newQ.option_d} onChange={(e) => setNewQ({ ...newQ, option_d: e.target.value })} style={{ padding: '12px', borderRadius: '10px' }} />
+                                        <input type="text" placeholder="Option E" className="input-field" value={newQ.option_e} onChange={(e) => setNewQ({ ...newQ, option_e: e.target.value })} style={{ padding: '12px', borderRadius: '10px' }} />
+                                        <input type="text" placeholder="Option F" className="input-field" value={newQ.option_f} onChange={(e) => setNewQ({ ...newQ, option_f: e.target.value })} style={{ padding: '12px', borderRadius: '10px' }} />
+                                        <input type="text" placeholder="Option G" className="input-field" value={newQ.option_g} onChange={(e) => setNewQ({ ...newQ, option_g: e.target.value })} style={{ padding: '12px', borderRadius: '10px' }} />
+                                        <input type="text" placeholder="Option H" className="input-field" value={newQ.option_h} onChange={(e) => setNewQ({ ...newQ, option_h: e.target.value })} style={{ padding: '12px', borderRadius: '10px' }} />
+
+                                        <select className="input-field option-correct-select" style={{ gridColumn: 'span 4', padding: '12px', borderRadius: '10px' }} value={newQ.correct_option} onChange={(e) => setNewQ({ ...newQ, correct_option: e.target.value })}>
+                                            <option value="">Ans?</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option><option value="E">E</option><option value="F">F</option><option value="G">G</option><option value="H">H</option>
+                                        </select>
+                                    </div>
+                                )}
+
+                                <hr style={{ borderTop: '1px solid #e2e8f0', margin: '20px 0' }} />
+                                <div style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '15px', fontWeight: 'bold', textTransform: 'uppercase' }}>Update Exam Metadata for this Question</div>
+
+                                <div className="grid-3-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', width: '100%', marginBottom: '15px' }}>
+                                    <input type="text" placeholder="Unit (e.g. 01)" className="input-field hover-glow" value={editMeta.unit || ""} onChange={(e) => setEditMeta({ ...editMeta, unit: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px', boxSizing: 'border-box' }} />
+                                    <input type="text" placeholder="Chapter (e.g. 05)" className="input-field hover-glow" value={editMeta.chapter || ""} onChange={(e) => setEditMeta({ ...editMeta, chapter: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px', boxSizing: 'border-box' }} />
+                                    <input type="text" placeholder="Paper ID" className="input-field hover-glow" value={editMeta.paperId || ""} onChange={(e) => setEditMeta({ ...editMeta, paperId: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px', boxSizing: 'border-box' }} />
+                                    <input type="text" placeholder="Validity" className="input-field hover-glow" value={editMeta.validity || ""} onChange={(e) => setEditMeta({ ...editMeta, validity: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px', boxSizing: 'border-box' }} />
+
+                                    <select className="input-field hover-glow" value={editMeta.permission || "Management"} onChange={(e) => setEditMeta({ ...editMeta, permission: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px', boxSizing: 'border-box' }}>
+                                        <option value="Management">Management</option><option value="Provider">Provider</option><option value="Seekers">Seekers</option><option value="Guest">Guest</option><option value="Permanent">Permanent</option><option value="Adhoc">Adhoc</option><option value="Daily Wagers">Daily Wagers</option><option value="Others">Others</option>
+                                    </select>
+
+                                    <input type="password" placeholder="Exam Password" className="input-field hover-glow" value={editMeta.examPassword || ""} onChange={(e) => setEditMeta({ ...editMeta, examPassword: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px', boxSizing: 'border-box' }} />
+                                </div>
+
+                            </div>
+                            <div className="modal-footer-premium footer-actions-modal" style={{ padding: '0', background: 'transparent', border: 'none', display: 'flex', gap: '10px', flexShrink: 0, marginTop: '20px' }}>
+                                <button onClick={handleCancelEdit} className="btn-secondary" style={{ flex: 1, padding: '14px', borderRadius: '10px' }}>Cancel</button>
+                                <button onClick={handleSaveQuestion} className="btn-primary ripple-effect" style={{ flex: 1, padding: '14px', borderRadius: '10px' }}>Update Record</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {showDeleteModal && (
+                    <div className="modal-overlay glass-overlay fade-in" onClick={() => setShowDeleteModal(false)}>
+                        <div className="modal-content premium-modal scale-up-bounce" onClick={e => e.stopPropagation()} style={{ padding: '35px', width: '400px', maxWidth: '90vw', textAlign: 'center' }}>
+                            <div style={{ width: '70px', height: '70px', background: '#fee2e2', color: '#ef4444', borderRadius: '50%', display: 'flex', alignItems: 'center', justify: 'center', margin: '0 auto 20px', boxShadow: '0 5px 15px rgba(239, 68, 68, 0.2)' }}>
+                                <Trash size={32} />
+                            </div>
+                            <h2 style={{ margin: '0 0 10px', color: '#0f172a', fontSize: '1.4rem', fontWeight: '800' }}>Delete Question?</h2>
+                            <p style={{ color: '#64748b', marginBottom: '25px', fontSize: '0.95rem' }}>
+                                Are you sure you want to delete this question? This action cannot be undone.
+                            </p>
+                            <div style={{ display: 'flex', gap: '10px', justify: 'center' }}>
+                                <button onClick={() => setShowDeleteModal(false)} className="btn-secondary" style={{ flex: 1, padding: '12px', borderRadius: '10px' }}>Cancel</button>
+                                <button onClick={confirmDelete} className="btn-primary" style={{ background: '#ef4444', flex: 1, padding: '12px', borderRadius: '10px', border: 'none' }}>Yes, Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+            </div>
+
+            {/* 🚀 CSS STYLES (NEW FEATURE STYLES ADDED) */}
+            <style>{`
+            :root {
+                --primary: #3b82f6;
+                --warning: #f59e0b;
+                --bg-body: #f8fafc;
+                --text-main: #1e293b;
+            }
+            
+            html, body, #root { margin: 0; padding: 0; height: 100%; }
+
+            .exams-page-wrapper {
+                display: flex; width: 100%; height: 100vh;
+                overflow: hidden; background: var(--bg-body);
+                font-family: 'Plus Jakarta Sans', sans-serif;
+                color: var(--text-main);
+            }
+
+            .exams-main-content {
+                flex: 1; margin-left: 280px; padding: 30px; padding-bottom: 120px;
+                height: 100vh; overflow-y: auto; box-sizing: border-box;
+                width: calc(100% - 280px); /* Strict width control */
+            }
+
+            .glass-overlay {
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px);
+                display: flex; justify-content: center; align-items: center; z-index: 1000;
+            }
+
+            .premium-modal {
+                background: rgba(255, 255, 255, 0.95); width: 600px;
+                border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+                position: relative; border: 1px solid rgba(255, 255, 255, 0.5); box-sizing: border-box;
+            }
+
+            .modal-decorative-bg {
+                position: absolute; top: -50px; right: -50px; width: 200px; height: 200px;
+                background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+                filter: blur(60px); opacity: 0.5; z-index: 0; border-radius: 50%;
+            }
+
+            .modal-header-premium {
+                padding: 30px 30px 10px; display: flex; justify-content: space-between; align-items: flex-start;
+                position: relative; z-index: 1;
+            }
+            .subtitle { font-size: 0.85rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
+            .modal-header-premium h3 { font-size: 1.8rem; font-weight: 800; margin: 5px 0 0; background: linear-gradient(to right, #1e293b, #475569); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+            .close-btn-premium {
+                background: #f1f5f9; border: none; width: 40px; height: 40px; border-radius: 50%;
+                display: flex; align-items: center; justify-content: center; color: #64748b;
+                cursor: pointer; transition: 0.3s; flex-shrink: 0;
+            }
+            .close-btn-premium:hover { background: #fee2e2; color: #ef4444; transform: rotate(90deg); }
+
+            .modal-body-premium { padding: 30px; position: relative; z-index: 1; }
+
+            .question-hero {
+                background: white; padding: 25px; border-radius: 16px;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border: 1px solid #e2e8f0;
+                margin-bottom: 25px; position: relative;
+            }
+            .q-icon { position: absolute; top: -15px; left: 20px; background: #3b82f6; color: white; padding: 8px; border-radius: 10px; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.4); }
+            .q-text { font-size: 1.15rem; font-weight: 600; color: #334155; line-height: 1.6; margin-top: 10px; }
+
+            .stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; }
+            .stat-card { padding: 15px; border-radius: 14px; display: flex; flex-direction: column; gap: 10px; transition: 0.3s; cursor: default; }
+            .stat-card:hover { transform: translateY(-5px); }
+
+            .stat-card.blue { background: #eff6ff; border: 1px solid #dbeafe; }
+            .stat-card.blue .stat-icon { color: #3b82f6; background: white; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
+
+            .stat-card.purple { background: #f5f3ff; border: 1px solid #ede9fe; }
+            .stat-card.purple .stat-icon { color: #8b5cf6; background: white; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
+
+            .stat-card.orange { background: #fff7ed; border: 1px solid #ffedd5; }
+            .stat-card.orange .stat-icon { color: #f97316; background: white; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
+
+            .stat-label { font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase; }
+            .stat-value { font-size: 1rem; color: #1e293b; font-weight: 800; display: block; margin-top: 2px; }
+
+            .modal-footer-premium { padding: 20px 30px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; }
+            .btn-edit-premium {
+                background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+                color: white; border: none; padding: 12px 24px; border-radius: 12px;
+                font-weight: 700; display: flex; align-items: center; gap: 8px;
+                cursor: pointer; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.4); transition: 0.2s;
+            }
+            .btn-edit-premium:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.5); }
+
+            .slide-in-top { animation: slideInTop 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+            .pop-in-bounce { animation: popInBounce 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55); }
+            .scale-up-bounce { animation: scaleUpBounce 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+            @keyframes slideInTop { from { opacity: 0; transform: translateY(-30px); } to { opacity: 1; transform: translateY(0); } }
+            @keyframes popInBounce { 0% { transform: scale(0); } 60% { transform: scale(1.1); } 100% { transform: scale(1); } }
+            @keyframes scaleUpBounce { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+            .stagger-1 { animation: staggerUp 0.6s ease-out 0.1s forwards; opacity: 0; }
+            .stagger-2 { animation: staggerUp 0.6s ease-out 0.2s forwards; opacity: 0; }
+            .stagger-3 { animation: staggerUp 0.6s ease-out 0.3s forwards; opacity: 0; }
+            @keyframes staggerUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+            .input-group { position: relative; }
+            .focus-border { position: absolute; bottom: 0; left: 0; width: 0; height: 2px; background: var(--primary); transition: 0.3s; }
+            .input-field:focus ~ .focus-border { width: 100%; }
+            .input-field:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1); }
+
+            .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+            .header-titles { display: flex; flex-direction: column; }
+            .page-title { font-size: 2rem; font-weight: 800; margin: 0; color: var(--text-main); display: flex; align-items: center; gap: 10px; }
+            .page-subtitle { color: #64748b; margin: 5px 0 0; }
+
+            .tab-switch { background: white; padding: 5px; border-radius: 12px; display: flex; gap: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+            .tab-btn { border: none; background: transparent; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; color: #64748b; transition: 0.2s; white-space: nowrap; }
+            .tab-btn.active { background: #eff6ff; color: var(--primary); }
+
+            .card { background: white; border-radius: 16px; padding: 25px; border: 1px solid #e2e8f0; box-sizing: border-box; width: 100%; max-width: 100%; overflow: hidden; }
+            .shadow-md { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+            .card-header { display: flex; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #f1f5f9; padding-bottom: 15px; }
+            .card-header h3 { margin: 0; font-size: 1.1rem; color: var(--text-main); }
+            .mb-20 { margin-bottom: 20px; }
+
+            .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px; align-items: center; width: 100%; }
+            .full-width { grid-column: span 1; }
+            .full-width-grid { grid-column: 1 / -1; width: 100%; }
+
+            .input-field { padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; outline: none; background: white; color: #1e293b; font-size: 0.9rem; transition: all 0.2s; width: 100%; font-weight: 600; box-sizing: border-box; }
+
+            .btn-group { display: flex; gap: 10px; }
+            .btn-primary { background: var(--primary); color: white; border: none; padding: 12px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;}
+            .btn-primary:hover { background: #2563eb; }
+            .btn-secondary { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; padding: 12px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center;}
+            .btn-secondary:hover { background: #e2e8f0; }
+            .btn-success { background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; display: flex; gap: 8px; align-items: center; transition: 0.2s; white-space: nowrap; }
+            .btn-success:hover { background: #059669; }
+            .btn-danger { background: #ef4444; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; display: flex; gap: 8px; align-items: center; transition: 0.2s; white-space: nowrap; }
+            
+            .save-db-btn { width: auto; }
+
+            .table-wrapper { overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; display: block; }
+            .modern-table { width: 100%; border-collapse: collapse; min-width: 700px; }
+            .modern-table th { text-align: left; padding: 12px; color: #64748b; border-bottom: 1px solid #e2e8f0; font-size: 0.9rem; background: #f8fafc; font-weight: 800; white-space: nowrap; }
+            .modern-table td { padding: 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; white-space: nowrap; }
+            .table-row { opacity: 0; animation: staggerUp 0.4s ease-out forwards; transition: 0.2s; }
+            .table-row:hover { background: #f8fafc; }
+
+            .truncate-text { max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+            .table-card-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
+            .table-header-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; flex-wrap: wrap; }
+
+            .action-buttons { display: flex; gap: 10px; justify-content: center; }
+            .icon-btn { border: none; width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .icon-btn:hover { transform: translateY(-2px); }
+            .btn-view { background: #3b82f6; color: white; }
+            .btn-edit { background: #f59e0b; color: white; }
+            .btn-delete { background: #ef4444; color: white; }
+
+            .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; background: #f1f5f9; color: #475569; display: inline-block; }
+            .badge.easy { background: #dcfce7; color: #166534; }
+            .badge.medium { background: #fef9c3; color: #854d0e; }
+            .badge.hard { background: #fee2e2; color: #991b1b; }
+
+            .pagination-container { display: flex; justify-content: center; align-items: center; margin-top: 25px; gap: 15px; }
+            .page-btn { width: 36px; height: 36px; border-radius: 8px; border: 1px solid #e2e8f0; background: white; color: #64748b; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+            .page-btn:hover:not(:disabled) { background: #eff6ff; color: var(--primary); border-color: var(--primary); }
+            .page-btn.active { background: var(--primary); color: white; border-color: var(--primary); box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.4); }
+            .page-btn:disabled { opacity: 0.5; cursor: not-allowed; background: #f1f5f9; }
+            .nav-btn { width: auto; padding: 0 10px; }
+
+            .exam-meta-header { display: flex; justify-content: space-between; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; align-items: center; flex-wrap: wrap; gap: 15px;}
+            .omr-header-card { padding: 20px; border-bottom: none; }
+            .omr-header-right { text-align: right; }
+            .meta-tag { background: #f1f5f9; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; color: #475569; margin-right: 10px; display: inline-block; margin-bottom: 5px; }
+            
+            .answer-sheet-preview { background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #cbd5e1; }
+            .handwriting-font { font-family: 'Courier New', Courier, monospace; font-size: 1.05rem; color: #334155; line-height: 1.6; font-style: italic; }
+
+            .evaluation-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 25px; }
+            .eval-card { padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; transition: transform 0.3s; background: white; }
+            .eval-card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+            .eval-card.done { border-left: 4px solid #10b981; }
+            .eval-card.pending { background: #fffbeb; border-left: 4px solid #f59e0b; }
+            .eval-header { display: flex; gap: 8px; color: #64748b; font-weight: 700; font-size: 0.9rem; margin-bottom: 10px; }
+            .eval-score { font-size: 2rem; font-weight: 800; color: #1e293b; margin-bottom: 5px; }
+
+            .ai-check-box { display: flex; justify-content: space-between; align-items: center; background: #f0fdf4; padding: 20px; border-radius: 12px; border: 1px solid #bbf7d0; flex-wrap: wrap; gap: 15px;}
+            .btn-ai { background: #16a34a; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 700; cursor: pointer; display: flex; gap: 8px; align-items: center; transition: 0.2s; white-space: nowrap; }
+            .btn-ai:hover { background: #15803d; }
+
+            /* OMR SPECIFIC STYLES */
+            .omr-question-row { display: flex; flex-direction: column; gap: 15px; padding: 20px 0; border-bottom: 1px solid #f1f5f9; }
+            .omr-q-text { font-size: 1.15rem; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;}
+            .q-no { background: #3b82f6; color: white; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 1rem; flex-shrink: 0;}
+            .q-marking-info { font-size: 0.85rem; color: #94a3b8; background: #f1f5f9; padding: 2px 8px; border-radius: 6px; }
+            
+            .omr-options-grid { display: flex; gap: 30px; flex-wrap: wrap; margin-left: 40px; }
+            .omr-option-wrapper { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+            .omr-bubble { width: 35px; height: 35px; border-radius: 50%; border: 2px solid #cbd5e1; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #64748b; font-size: 1.1rem; transition: 0.2s; background: white; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); flex-shrink: 0;}
+            .omr-bubble:hover { border-color: #3b82f6; color: #3b82f6; background: #eff6ff; }
+            .omr-bubble.selected { background: #10b981; border-color: #10b981; color: white; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.4); transform: scale(1.1); }
+            .omr-opt-text { font-size: 1rem; color: #475569; font-weight: 500; }
+
+            .submit-exam-wrapper { text-align: center; margin-top: 40px; border-top: 2px dashed #e2e8f0; padding-top: 30px; display: flex; justify-content: center; width: 100%; box-sizing: border-box;}
+            .submit-exam-btn { padding: 15px 40px; font-size: 1.2rem; background: #10b981; width: auto; }
+            .submit-exam-btn:hover { background: #059669; }
+
+            .result-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 40px; }
+            .r-stat-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px; }
+            .r-label { font-size: 0.9rem; color: #64748b; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; }
+            .r-value { font-size: 2rem; font-weight: 900; color: #1e293b; }
+
+            .final-score-box { background: linear-gradient(135deg, #eff6ff, #e0e7ff); border: 1px solid #bfdbfe; padding: 40px; border-radius: 24px; display: flex; justify-content: space-around; align-items: center; box-shadow: 0 10px 30px rgba(59,130,246,0.1); flex-wrap: wrap; gap: 20px;}
+            .grade-circle { width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 10px 25px rgba(139,92,246,0.4); border: 4px solid white; flex-shrink: 0;}
+
+            /* 🔥 LIGHT THEME: LIVE QUIZ & FLICKERING LIGHTS CSS */
+            .quiz-lights-container.light-mode-lights { display: flex; gap: 10px; background: #f1f5f9; padding: 10px 15px; border-radius: 50px; border: 2px solid #cbd5e1; }
+            .light-mode-lights .q-light { padding: 8px 15px; border-radius: 20px; font-weight: 800; font-size: 0.8rem; color: #94a3b8; transition: 0.3s; }
+            .light-mode-lights .q-light.red.active { background: #ef4444; color: white; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); }
+            .light-mode-lights .q-light.yellow.active { background: #f59e0b; color: white; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4); }
+            .light-mode-lights .q-light.green.active { background: #10b981; color: white; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); }
+            .flickering { animation: flickerLight 0.5s infinite alternate; }
+            @keyframes flickerLight { from { opacity: 1; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.5); } to { opacity: 0.8; box-shadow: none; } }
+            
+            .active-group-light { transform: scale(1.05); box-shadow: 0 10px 25px rgba(59, 130, 246, 0.15); }
+
+            .animate-spin { animation: spin 1s linear infinite; }
+
+            /* MOBILE RESPONSIVENESS FIXES */
+            @media (max-width: 1024px) {
+                .exams-main-content { margin-left: 0 !important; max-width: 100%; width: 100%; }
+                .form-grid { grid-template-columns: 1fr 1fr; }
+            }
+
+            @media (max-width: 850px) {
+                html, body, #root { height: auto !important; min-height: 100vh !important; overflow-y: visible !important; }
+                .exams-page-wrapper { display: block !important; height: auto !important; min-height: 100vh !important; }
+                
+                .exams-main-content { 
+                    margin-left: 0 !important; 
+                    padding: 15px !important; 
+                    padding-top: 85px !important; 
+                    padding-bottom: 150px !important; 
+                    width: 100% !important; 
+                    max-width: 100% !important; 
+                    height: auto !important; 
+                    min-height: 100vh !important; 
+                    overflow-x: hidden !important; 
+                    display: block !important; 
+                    box-sizing: border-box !important;
+                }
+                
+                .page-header { flex-direction: column; align-items: flex-start !important; gap: 15px; }
+                .tab-switch { width: 100%; display: flex; justify-content: flex-start; overflow-x: auto; padding-bottom: 5px; -webkit-overflow-scrolling: touch;}
+                .tab-btn { flex: 1; justify-content: center; min-width: 130px;}
+                
+                .form-grid { display: flex !important; flex-direction: column !important; gap: 15px; width: 100%; box-sizing: border-box;}
+                .grid-3-col, .grid-2-col { display: flex !important; flex-direction: column !important; gap: 15px; width: 100%;}
+                .mcq-options-row { display: grid !important; grid-template-columns: 1fr 1fr !important; }
+                .mcq-options-row .input-field, .option-correct-select { width: 100%; flex: none; }
+                
+                .save-db-btn { width: 100%; }
+
+                .table-card-header { flex-direction: column; align-items: flex-start !important; gap: 15px; }
+                .table-header-actions { margin-left: 0; width: 100%; justify-content: flex-start; }
+                .table-header-actions .btn-success, .table-header-actions .btn-view { flex: 1; justify-content: center; }
+                
+                .exam-meta-header { flex-direction: column; align-items: flex-start !important; gap: 10px; }
+                .omr-header-right, .meta-right { text-align: left !important; width: 100%;}
+                
+                .evaluation-grid { grid-template-columns: 1fr; gap: 15px; }
+                .ai-check-box { flex-direction: column; align-items: flex-start; gap: 15px; }
+                .btn-ai, .ai-analysis-btn { width: 100%; justify-content: center; }
+                
+                .modal-content { max-width: 95vw !important; padding: 20px !important;}
+                .stats-grid { grid-template-columns: 1fr; }
+                .footer-actions-modal { flex-direction: column; }
+                .footer-actions-modal button { width: 100%; }
+
+                .omr-options-grid { margin-left: 0; gap: 15px; flex-direction: column; }
+                .omr-q-text { align-items: flex-start; flex-direction: column; gap: 5px;}
+                .q-marking-info { align-self: flex-start; margin-left: 40px; margin-top: 0;}
+                
+                .submit-exam-wrapper { flex-direction: column; }
+                .submit-exam-btn { width: 100%; padding: 15px 20px; font-size: 1.1rem; }
+
+                .result-stats-grid { grid-template-columns: 1fr 1fr; gap: 15px;}
+                .final-score-box { flex-direction: column; gap: 30px; text-align: center; }
+                
+                /* Quiz Mobile Specific Fixes */
+                .quiz-header-wrapper { flex-direction: column; align-items: flex-start !important; }
+                .quiz-lights-container { width: 100%; justify-content: center; flex-wrap: wrap; border-radius: 16px; }
+                .timer-text { font-size: 4rem !important; }
+                .timer-action-btns { flex-direction: column; width: 100%; }
+                .timer-action-btns button { width: 100%; justify-content: center; }
+                .award-btns { flex-direction: column; width: 100%; }
+                .award-btns button { width: 100%; justify-content: center; }
+                .quiz-groups-grid { grid-template-columns: repeat(2, 1fr); }
+            }
+
+            @media (max-width: 480px) {
+                .quiz-groups-grid { grid-template-columns: 1fr; }
+            }
+            `}</style>
+        </div>
+    );
 }

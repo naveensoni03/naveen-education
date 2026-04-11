@@ -1,3 +1,7 @@
-from django.shortcuts import render
+from rest_framework import viewsets
+from .models import Transport
+from .serializers import TransportSerializer
 
-# Create your views here.
+class TransportViewSet(viewsets.ModelViewSet):
+    queryset = Transport.objects.all()
+    serializer_class = TransportSerializer

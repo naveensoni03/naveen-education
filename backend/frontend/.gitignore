@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Media files
+media/
+media/*
+
+# Temp logs and scripts
+*.txt
+*.ps1
+fix_*.py
+upgrade_*.py
+add_*.py

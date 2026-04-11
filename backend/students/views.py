@@ -1,37 +1,267 @@
-from rest_framework import generics
+from django.db import transaction
+from django.contrib.auth import get_user_model
+from django.apps import apps
+from django.db.models import Q
+
+from rest_framework import generics, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.decorators import api_view
+from rest_framework.exceptions import ValidationError
+
 from .models import Student
 from .serializers import StudentSerializer
-from rest_framework.response import Response
+from datetime import datetime
 
+User = get_user_model()
+
+# ==========================================
+# 1. LIST & CREATE STUDENT (With Auth User Creation)
+# ==========================================
 class StudentListCreateView(generics.ListCreateAPIView):
+    # Sabse naye students hamesha upar
+    queryset = Student.objects.all().order_by('-id')
+    serializer_class = StudentSerializer
+    parser_classes = (MultiPartParser, FormParser) 
+    permission_classes = [AllowAny] 
+    
+    # Pagination OFF taki ek bhi bachha hide na ho
+    pagination_class = None
+
+    def post(self, request, *args, **kwargs):
+        if hasattr(request.data, '_mutable'):
+            request.data._mutable = True
+            data = request.data
+        else:
+            try:
+                data = request.data.copy()
+            except AttributeError:
+                data = request.data
+                
+        is_new_student = str(data.get('is_new_student', '')).lower() == 'true'
+
+        try:
+            with transaction.atomic():
+                user_obj = None
+                
+                # --- NAYA USER ACCOUNT BANAO ---
+                if is_new_student:
+                    email = data.get('email')
+                    password = data.get('password')
+                    first_name = data.get('first_name', '')
+                    last_name = data.get('last_name', '')
+                    full_name_str = f"{first_name} {last_name}".strip()
+
+                    if not email or not password:
+                        return Response({"error": "Email and Password are required!"}, status=status.HTTP_400_BAD_REQUEST)
+
+                    # 🔥 Agar Email pehle se hai toh Crash nahi hoga!
+                    if User.objects.filter(email=email).exists():
+                        return Response(
+                            {"error": "This Login ID (Email) is already registered. A Student MUST have a unique email separate from the Parent."}, 
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+
+                    user_obj = User.objects.create(
+                        email=email,
+                        full_name=full_name_str,
+                        role='Student',
+                        is_active=True
+                    )
+                    user_obj.set_password(password)
+                    user_obj.save()
+
+                # --- STUDENT PROFILE SAVE KARO ---
+                serializer = self.get_serializer(data=data)
+                serializer.is_valid(raise_exception=True) 
+
+                if user_obj:
+                    serializer.save(user=user_obj)
+                else:
+                    serializer.save()
+                    
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        except ValidationError as e:
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            print("❌ STUDENT CREATION ERROR:", str(e))
+            return Response({"error": f"Internal Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ==========================================
+# 2. DETAIL, UPDATE & DELETE 
+# ==========================================
+class StudentDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Student.objects.all()
     serializer_class = StudentSerializer
     parser_classes = (MultiPartParser, FormParser)
-    permission_classes = [AllowAny] 
+    permission_classes = [AllowAny]
 
+
+# ==========================================
+# 3. QUICK TOGGLE 
+# ==========================================
 class StudentToggleStatus(generics.UpdateAPIView):
     queryset = Student.objects.all()
     serializer_class = StudentSerializer
+    permission_classes = [AllowAny]
 
     def patch(self, request, *args, **kwargs):
         student = self.get_object()
         student.is_active = not student.is_active
         student.save()
-        return Response({"status": student.is_active})
-    
-    
-    
-    
-    
-# students/views.py ke end mein paste karein
+        return Response({"status": student.is_active, "message": "Status updated successfully"})
 
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
 
+# ==========================================
+# 4. DASHBOARD ANALYTICS 
+# ==========================================
 @api_view(['GET'])
 def student_count(request):
-    """Total students count return karega"""
     count = Student.objects.count()
     return Response({'count': count})
+
+
+# ==========================================
+# 5. CHANGE PASSWORD VIEW
+# ==========================================
+class ChangePasswordView(APIView):
+    # Sirf login user hi apna password badal sakta hai
+    permission_classes = [IsAuthenticated] 
+
+    def post(self, request):
+        user = request.user
+        old_password = request.data.get("old_password")
+        new_password = request.data.get("new_password")
+
+        # Check agar dono fields bheje hain
+        if not old_password or not new_password:
+            return Response({"error": "Old password and New password are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if old password is correct
+        if not user.check_password(old_password):
+            return Response({"error": "Old password is incorrect."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Set new password
+        user.set_password(new_password)
+        user.save()
+
+        return Response({"message": "Password changed successfully!"}, status=status.HTTP_200_OK)
+
+
+# ==========================================
+# 6. STUDENT DASHBOARD SUMMARY VIEW (🔥 UPDATED FOR WHATSAPP LINK)
+# ==========================================
+class StudentDashboardSummaryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        actual_enrolled_count = 0
+        current_student_user = request.user
+        whatsapp_groups = []
+        
+        # 1. Total Courses Count & Enrolled Batches Data Fetching
+        try:
+            # 🚀 FIND ALL BATCHES THIS STUDENT IS IN 
+            Batch = apps.get_model('batches', 'Batch')
+            
+            print(f"DEBUG: Checking Student Relation for User: {current_student_user.email}")
+            
+            # 🔥 SMART FIX: Dono cases handle kar liye ('student_profile' aur 'student')
+            student_profile = None
+            if hasattr(current_student_user, 'student_profile'):
+                student_profile = current_student_user.student_profile
+            elif hasattr(current_student_user, 'student'): 
+                student_profile = current_student_user.student
+            
+            if student_profile:
+                print(f"DEBUG: Student Profile Found: {student_profile}")
+                my_batches = Batch.objects.filter(students=student_profile, is_active=True)
+                
+                actual_enrolled_count = my_batches.count()
+                print(f"DEBUG: Enrolled Batches Count: {actual_enrolled_count}")
+                
+                # 🔥 WHATSAPP GROUPS FETCHING (Requirement 5)
+                for batch in my_batches:
+                    print(f"DEBUG: Checking Batch '{batch.name}' for WhatsApp Link...")
+                    if batch.whatsapp_group_link:
+                        print(f"DEBUG: ✅ Link Found: {batch.whatsapp_group_link}")
+                        whatsapp_groups.append({
+                            "id": batch.id,
+                            "name": batch.name,
+                            "link": batch.whatsapp_group_link
+                        })
+                    else:
+                        print(f"DEBUG: ❌ No WhatsApp Link in batch '{batch.name}'.")
+            else:
+                print("DEBUG: 🚨 No Student Profile attached to this User object!")
+                        
+        except Exception as e:
+            import traceback
+            print(f"❌ Dashboard Data Fetch Error: {e}")
+            print(traceback.format_exc())
+            actual_enrolled_count = 0
+
+        # 2. 🚀 REAL TIMETABLE FETCH (Today's Schedule)
+        schedule_list = []
+        try:
+            Schedule = apps.get_model('timetable', 'Schedule')
+            
+            # Aaj kon sa din hai? ('Mon', 'Tue', 'Wed', etc.)
+            current_day = datetime.now().strftime('%a') 
+            
+            # Database se aaj ki classes filter karo
+            todays_classes = Schedule.objects.filter(day=current_day).order_by('start_time')
+            
+            for cls in todays_classes:
+                start = cls.start_time.strftime('%I:%M %p') if hasattr(cls, 'start_time') and cls.start_time else "TBA"
+                end = cls.end_time.strftime('%I:%M %p') if hasattr(cls, 'end_time') and cls.end_time else ""
+                
+                subject_name = str(getattr(cls, 'subject', 'Class'))
+                topic_name = str(getattr(cls, 'topic', getattr(cls, 'description', 'Regular Class')))
+                
+                schedule_list.append({
+                    "id": cls.id,
+                    "time": start,
+                    "duration": f"Till {end}" if end else "Scheduled",
+                    "subject": subject_name,
+                    "topic": topic_name,
+                    "is_live": False  # Abhi ke liye False
+                })
+        except Exception as e:
+            print(f"❌ Timetable Fetch Error: {e}")
+            schedule_list = [] 
+
+        # Dashboard Data Combine
+        data = {
+            "stats": {
+                "enrolled_courses": actual_enrolled_count, 
+                "attendance_percentage": 92.0,
+                "average_cgpa": 84.5,
+                "performance_growth": 12.0
+            },
+            "schedule": schedule_list,  # ✅ Yahan backend wali Asli List bhej di
+            "tasks": [
+                {
+                    "id": 1,
+                    "title": "Chemistry Practical File",
+                    "due": "Today, 11:59 PM",
+                    "type": "assignment",
+                    "urgent": True
+                }
+            ],
+            "whatsapp_groups": whatsapp_groups, # 🔥 NEW: Database Se Nikala Hua Asli WhatsApp Link
+            "performance_chart": [
+                {"label": "M1", "value": 70},
+                {"label": "M2", "value": 50},
+                {"label": "M3", "value": 85},
+                {"label": "M4", "value": 60},
+                {"label": "M5", "value": 92},
+            ]
+        }
+        
+        return Response(data)
