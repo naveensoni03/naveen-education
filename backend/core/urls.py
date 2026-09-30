@@ -91,6 +91,7 @@ urlpatterns = [
     path("api/agents/", include("agents.urls")),
     path("api/logs/", include("logs.urls")),
     path("api/students/", include("students.urls")),
+    path("api/payments/", include("payments.urls")),
     path("api/teachers/", include("teachers.urls")), # 👈 YAHAN AAYEGA REQUEST DIRECTLY
     path("api/parents/", include("parents.urls")),
     path("api/institutions/", include("institutions.urls")),
@@ -113,6 +114,7 @@ urlpatterns = [
     path("api/news/", include("news.urls")), 
     path('api/chat/', AIChatAPI.as_view()),
     path("api/profiles/", include("profiles.urls")),
+    
 
     # 🛑 YEH WALA SABSE AAKHRI MEIN HONA CHAHIYE 🛑
     path("api/", include(router.urls)), 
